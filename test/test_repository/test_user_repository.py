@@ -19,7 +19,7 @@
 
 from default import Test, db
 from nose.tools import assert_raises
-from factories import UserFactory, user_repo
+from factories import UserFactory, UserFactoryMemory, memo_user_repo
 from pybossa.repositories import UserRepository
 from pybossa.exc import WrongObjectError, DBIntegrityError
 
@@ -273,7 +273,7 @@ class TestUserRepository(Test):
 
 class TestMemoryUserRepository(object):
 
-    user_repo = user_repo
+    user_repo = memo_user_repo
 
     def setUp(self):
         self.user_repo.clean()
@@ -291,7 +291,7 @@ class TestMemoryUserRepository(object):
     def test_get_returns_user(self):
         """Test get method returns a user if exists"""
 
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
 
         retrieved_user = self.user_repo.get(user.id)
 
@@ -310,7 +310,7 @@ class TestMemoryUserRepository(object):
     def test_get_by_name_returns_the_user(self):
         """Test get_by_name returns a user if exists"""
 
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
 
         retrieved_user = self.user_repo.get_by_name(user.name)
 
@@ -320,7 +320,7 @@ class TestMemoryUserRepository(object):
     def test_get_by(self):
         """Test get_by returns a user with the specified attribute"""
 
-        user = UserFactory.create(name='Jon Snow')
+        user = UserFactoryMemory.create(name='Jon Snow')
 
         retrieved_user = self.user_repo.get_by(name=user.name)
 
@@ -330,7 +330,7 @@ class TestMemoryUserRepository(object):
     def test_get_by_returns_none_if_no_user(self):
         """Test get_by returns None if no user matches the query"""
 
-        UserFactory.create(name='Tyrion Lannister')
+        UserFactoryMemory.create(name='Tyrion Lannister')
 
         user = self.user_repo.get_by(name='no_name')
 
@@ -340,7 +340,7 @@ class TestMemoryUserRepository(object):
     def get_all_returns_list_of_all_users(self):
         """Test get_all returns a list of all the existing users"""
 
-        users = UserFactory.create_batch(3)
+        users = UserFactoryMemory.create_batch(3)
 
         retrieved_users = self.user_repo.get_all()
 
@@ -353,7 +353,7 @@ class TestMemoryUserRepository(object):
     def test_filter_by_no_matches(self):
         """Test filter_by returns an empty list if no users match the query"""
 
-        UserFactory.create(name='reek', fullname='Theon Greyjoy')
+        UserFactoryMemory.create(name='reek', fullname='Theon Greyjoy')
 
         retrieved_users = self.user_repo.filter_by(name='asha')
 
@@ -365,8 +365,8 @@ class TestMemoryUserRepository(object):
         """Test filter_by returns a list of users that meet the filtering
         condition"""
 
-        UserFactory.create_batch(3, locale='es')
-        should_be_missing = UserFactory.create(locale='fr')
+        UserFactoryMemory.create_batch(3, locale='es')
+        should_be_missing = UserFactoryMemory.create(locale='fr')
 
         retrieved_users = self.user_repo.filter_by(locale='es')
 
@@ -377,8 +377,8 @@ class TestMemoryUserRepository(object):
     def test_filter_by_multiple_conditions(self):
         """Test filter_by supports multiple-condition queries"""
 
-        UserFactory.create_batch(2, locale='es', privacy_mode=True)
-        user = UserFactory.create(locale='es', privacy_mode=False)
+        UserFactoryMemory.create_batch(2, locale='es', privacy_mode=True)
+        user = UserFactoryMemory.create(locale='es', privacy_mode=False)
 
         retrieved_users = self.user_repo.filter_by(locale='es',
                                                    privacy_mode=False)
@@ -399,7 +399,7 @@ class TestMemoryUserRepository(object):
         """Test search_by_name returns a list with the user if searching by
         either its name or fullname"""
 
-        user = UserFactory.create(name='greenseer', fullname='Jojen Reed')
+        user = UserFactoryMemory.create(name='greenseer', fullname='Jojen Reed')
 
         search_by_name = self.user_repo.search_by_name('greenseer')
         search_by_fullname = self.user_repo.search_by_name('Jojen Reed')
@@ -411,8 +411,8 @@ class TestMemoryUserRepository(object):
     def test_search_by_name_capital_lower_letters(self):
         """Test search_by_name works the same with capital or lower letters"""
 
-        user_capitals = UserFactory.create(name='JOJEN')
-        user_lowers = UserFactory.create(name='meera')
+        user_capitals = UserFactoryMemory.create(name='JOJEN')
+        user_lowers = UserFactoryMemory.create(name='meera')
 
         search_lower = self.user_repo.search_by_name('jojen')
         search_capital = self.user_repo.search_by_name('MEERA')
@@ -424,7 +424,7 @@ class TestMemoryUserRepository(object):
     def test_search_by_name_substrings(self):
         """Test search_by_name works when searching by a substring"""
 
-        user = UserFactory.create(name='Hodor')
+        user = UserFactoryMemory.create(name='Hodor')
 
         search = self.user_repo.search_by_name('odo')
 
@@ -434,7 +434,7 @@ class TestMemoryUserRepository(object):
     def test_search_by_name_empty_string(self):
         """Test search_by_name returns an empty list when searching by '' """
 
-        user = UserFactory.create(name='Brandon')
+        user = UserFactoryMemory.create(name='Brandon')
 
         search = self.user_repo.search_by_name('')
 
@@ -452,7 +452,7 @@ class TestMemoryUserRepository(object):
     def test_total_users_count(self):
         """Test total_users return 1 if there is one user"""
 
-        UserFactory.create()
+        UserFactoryMemory.create()
         count = self.user_repo.total_users()
 
         assert count == 1, count
@@ -461,7 +461,7 @@ class TestMemoryUserRepository(object):
     def test_save(self):
         """Test save persist the user"""
 
-        user = UserFactory.build()
+        user = UserFactoryMemory.build()
         assert self.user_repo.get(user.id) is None
 
         self.user_repo.save(user)
@@ -473,7 +473,7 @@ class TestMemoryUserRepository(object):
     #     """Test save raises a DBIntegrityError if the instance to be saved lacks
     #     a required value"""
 
-    #     user = UserFactory.build(name=None)
+    #     user = UserFactoryMemory.build(name=None)
 
     #     assert_raises(DBIntegrityError, self.user_repo.save, user)
 
@@ -490,7 +490,7 @@ class TestMemoryUserRepository(object):
     def test_update(self):
         """Test update persists the changes made to the user"""
 
-        user = UserFactory.create(locale='en')
+        user = UserFactoryMemory.create(locale='en')
         user.locale = 'it'
 
         self.user_repo.update(user)
@@ -503,7 +503,7 @@ class TestMemoryUserRepository(object):
     #     """Test update raises a DBIntegrityError if the instance to be updated
     #     lacks a required value"""
 
-    #     user = UserFactory.create()
+    #     user = UserFactoryMemory.create()
     #     user.name = None
 
     #     assert_raises(DBIntegrityError, self.user_repo.update, user)
