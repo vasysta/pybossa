@@ -17,7 +17,7 @@
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
 from pybossa.model.category import Category
-from . import BaseFactory, factory, project_repo
+from . import BaseFactory, factory, project_repo, memo_project_repo
 
 
 class CategoryFactory(BaseFactory):
@@ -34,3 +34,12 @@ class CategoryFactory(BaseFactory):
     name = factory.Sequence(lambda n: 'category_name_%d' % n)
     short_name = factory.Sequence(lambda n: 'category_short_name_%d' % n)
     description = 'Category description for testing purposes'
+
+
+class CategoryFactoryMemory(CategoryFactory):
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        category = model_class(*args, **kwargs)
+        memo_project_repo.save_category(category)
+        return category

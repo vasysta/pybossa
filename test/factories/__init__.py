@@ -20,14 +20,20 @@ from pybossa.core import db
 
 import factory
 
-from pybossa.repositories import UserRepository
-from pybossa.repositories import ProjectRepository
-from pybossa.repositories import BlogRepository
-from pybossa.repositories import TaskRepository
+from pybossa.repositories import UserRepository, MemoryUserRepository
+from pybossa.repositories import ProjectRepository, MemoryProjectRepository
+from pybossa.repositories import BlogRepository, MemoryBlogRepository
+from pybossa.repositories import TaskRepository, MemoryTaskRepository
 user_repo = UserRepository(db)
 project_repo = ProjectRepository(db)
 blog_repo = BlogRepository(db)
 task_repo = TaskRepository(db)
+
+# Memory repositories
+memo_user_repo = MemoryUserRepository()
+memo_project_repo = MemoryProjectRepository()
+memo_task_repo = MemoryTaskRepository()
+memo_blog_repo = MemoryBlogRepository()
 
 
 def reset_all_pk_sequences():
@@ -46,9 +52,9 @@ class BaseFactory(factory.Factory):
 
 
 # Import the factories
-from app_factory import AppFactory
-from blogpost_factory import BlogpostFactory
-from category_factory import CategoryFactory
-from task_factory import TaskFactory
-from taskrun_factory import TaskRunFactory, AnonymousTaskRunFactory
-from user_factory import UserFactory
+from app_factory import AppFactory, AppFactoryMemory
+from blogpost_factory import BlogpostFactory, BlogpostFactoryMemory
+from category_factory import CategoryFactory, CategoryFactoryMemory
+from task_factory import TaskFactory, TaskFactoryMemory
+from taskrun_factory import TaskRunFactory, AnonymousTaskRunFactory, TaskRunFactoryMemory
+from user_factory import UserFactory, UserFactoryMemory

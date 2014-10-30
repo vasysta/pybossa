@@ -25,7 +25,6 @@ from pybossa.exc import WrongObjectError, DBIntegrityError
 
 class BlogRepository(object):
 
-
     def __init__(self, db):
         self.db = db
 
@@ -62,6 +61,54 @@ class BlogRepository(object):
         blog = self.db.session.query(Blogpost).filter(Blogpost.id==blogpost.id).first()
         self.db.session.delete(blog)
         self.db.session.commit()
+
+
+    def _validate_can_be(self, action, blogpost):
+        if not isinstance(blogpost, Blogpost):
+            name = blogpost.__class__.__name__
+            msg = '%s cannot be %s by %s' % (name, action, self.__class__.__name__)
+            raise WrongObjectError(msg)
+
+
+
+class MemoryBlogRepository(object):
+
+    def __init__(self):
+        self.store = {}
+        self.count = 0
+
+    def clean(self):
+        self.store = {}
+        self.count = 0
+
+    def _next_id(self):
+        self.count += 1
+        return self.count
+
+
+    def get(self, id):
+        return self.store.get(id)
+
+    def get_by(self, **attributes):
+        posts = filter(lambda post: reduce(lambda y, z: y and getattr(post, z) == attributes[z], attributes.keys(), True), self.store.values())
+        return None if len(posts) == 0 else posts.pop()
+
+    def filter_by(self, **filters):
+        return filter(lambda post: reduce(lambda y, z: y and getattr(post, z) == filters[z], filters.keys(), True), self.store.values())
+
+    def save(self, blogpost):
+        self._validate_can_be('saved', blogpost)
+        if not blogpost.id:
+            blogpost.id = self._next_id()
+        self.store[blogpost.id] = blogpost
+
+    def update(self, blogpost):
+        self._validate_can_be('updated', blogpost)
+        self.store[blogpost.id] = blogpost
+
+    def delete(self, blogpost):
+        self._validate_can_be('deleted', blogpost)
+        del self.store[blogpost.id]
 
 
     def _validate_can_be(self, action, blogpost):

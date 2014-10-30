@@ -17,7 +17,7 @@
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
 from pybossa.model.task import Task
-from . import BaseFactory, factory, task_repo
+from . import BaseFactory, factory, task_repo, memo_task_repo
 
 
 class TaskFactory(BaseFactory):
@@ -38,3 +38,14 @@ class TaskFactory(BaseFactory):
     calibration = 0
     priority_0 = 0.0
     n_answers = 30
+
+
+class TaskFactoryMemory(TaskFactory):
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        task = model_class(*args, **kwargs)
+        memo_task_repo.save(task)
+        return task
+
+    app = factory.SubFactory('factories.AppFactoryMemory')

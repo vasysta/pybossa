@@ -26,7 +26,6 @@ from pybossa.exc import WrongObjectError, DBIntegrityError
 
 class ProjectRepository(object):
 
-
     def __init__(self, db):
         self.db = db
 
@@ -109,6 +108,100 @@ class ProjectRepository(object):
         self._validate_can_be('deleted as a Category', category, klass=Category)
         self.db.session.query(Category).filter(Category.id==category.id).delete()
         self.db.session.commit()
+
+
+    def _validate_can_be(self, action, element, klass=App):
+        if not isinstance(element, klass):
+            name = element.__class__.__name__
+            msg = '%s cannot be %s by %s' % (name, action, self.__class__.__name__)
+            raise WrongObjectError(msg)
+
+
+class MemoryProjectRepository(object):
+
+    def __init__(self):
+        self.store = {}
+        self.count = 0
+        self.category_store = {}
+        self.category_count = 0
+
+    def clean(self):
+        self.store = {}
+        self.count = 0
+        self.category_store = {}
+        self.category_count = 0
+
+    def _next_id(self):
+        self.count += 1
+        return self.count
+
+    def _next_category_id(self):
+        self.category_count += 1
+        return self.category_count
+
+
+    # Methods for App/Project objects
+    def get(self, id):
+        return self.store.get(id)
+
+    def get_by_shortname(self, short_name):
+        projects = filter(lambda x: x.short_name == short_name, self.store.values())
+        return None if len(projects) == 0 else projects.pop()
+
+    def get_by(self, **attributes):
+        projects = filter(lambda project: reduce(lambda y, z: y and getattr(project, z) == attributes[z], attributes.keys(), True), self.store.values())
+        return None if len(projects) == 0 else projects.pop()
+
+    def get_all(self):
+        return self.store.values()
+
+    def filter_by(self, **filters):
+        return filter(lambda project: reduce(lambda y, z: y and getattr(project, z) == filters[z], filters.keys(), True), self.store.values())
+
+    def save(self, project):
+        self._validate_can_be('saved', project)
+        if not project.id:
+            project.id = self._next_id()
+        self.store[project.id] = project
+
+    def update(self, project):
+        self._validate_can_be('updated', project)
+        self.store[project.id] = project
+
+    def delete(self, project):
+        self._validate_can_be('deleted', project)
+        del self.store[project.id]
+
+
+    # Methods for Category objects
+    def get_category(self, id=None):
+        if id is None:
+            return
+        return self.category_store.get(id)
+
+    def get_category_by(self, **attributes):
+        categories = filter(lambda category: reduce(lambda y, z: y and getattr(category, z) == attributes[z], attributes.keys(), True), self.category_store.values())
+        return None if len(categories) == 0 else categories.pop()
+
+    def get_all_categories(self):
+        return self.category_store.values()
+
+    def filter_categories_by(self, **filters):
+        return filter(lambda category: reduce(lambda y, z: y and getattr(category, z) == filters[z], filters.keys(), True), self.category_store.values())
+
+    def save_category(self, category):
+        self._validate_can_be('saved as a Category', category, klass=Category)
+        if not category.id:
+            category.id = self._next_category_id()
+        self.category_store[category.id] = category
+
+    def update_category(self, new_category):
+        self._validate_can_be('updated as a Category', new_category, klass=Category)
+        self.category_store[new_category.id] = new_category
+
+    def delete_category(self, category):
+        self._validate_can_be('deleted as a Category', category, klass=Category)
+        del self.category_store[category.id]
 
 
     def _validate_can_be(self, action, element, klass=App):

@@ -17,7 +17,7 @@
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
 from pybossa.model.app import App
-from . import BaseFactory, factory, project_repo
+from . import BaseFactory, factory, project_repo, memo_project_repo
 
 
 class AppFactory(BaseFactory):
@@ -43,3 +43,16 @@ class AppFactory(BaseFactory):
     category = factory.SubFactory('factories.CategoryFactory')
     category_id = factory.LazyAttribute(lambda app: app.category.id)
     info = {'task_presenter': '<div></div>'}
+
+
+class AppFactoryMemory(AppFactory):
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        project = model_class(*args, **kwargs)
+        memo_project_repo.save(project)
+        return project
+
+    owner = factory.SubFactory('factories.UserFactoryMemory')
+    owner_id = factory.LazyAttribute(lambda app: app.owner.id)
+    category = factory.SubFactory('factories.CategoryFactoryMemory')

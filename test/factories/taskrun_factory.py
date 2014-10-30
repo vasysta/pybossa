@@ -17,7 +17,7 @@
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
 from pybossa.model.task_run import TaskRun
-from . import BaseFactory, factory, task_repo
+from . import BaseFactory, factory, task_repo, memo_task_repo
 
 
 class TaskRunFactory(BaseFactory):
@@ -43,3 +43,15 @@ class AnonymousTaskRunFactory(TaskRunFactory):
     user = None
     user_id = None
     user_ip = '127.0.0.1'
+
+
+class TaskRunFactoryMemory(TaskRunFactory):
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        taskrun = model_class(*args, **kwargs)
+        memo_task_repo.save(taskrun)
+        return taskrun
+
+    task = factory.SubFactory('factories.TaskFactoryMemory')
+    user = factory.SubFactory('factories.UserFactoryMemory')

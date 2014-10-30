@@ -26,7 +26,6 @@ from pybossa.exc import WrongObjectError, DBIntegrityError
 
 class UserRepository(object):
 
-
     def __init__(self, db):
         self.db = db
 
@@ -73,6 +72,67 @@ class UserRepository(object):
         except IntegrityError as e:
             self.db.session.rollback()
             raise DBIntegrityError(e)
+
+
+    def _validate_can_be(self, action, user):
+        if not isinstance(user, User):
+            name = user.__class__.__name__
+            msg = '%s cannot be %s by %s' % (name, action, self.__class__.__name__)
+            raise WrongObjectError(msg)
+
+
+class MemoryUserRepository(object):
+    """User repository class for use in tests. Exposes the same API as the
+    DB based one."""
+
+    def __init__(self):
+        self.store = {}
+        self.count = 0
+
+    def clean(self):
+        self.store = {}
+        self.count = 0
+
+    def _next_id(self):
+        self.count += 1
+        return self.count
+
+    def get(self, id):
+        return self.store.get(id)
+
+    def get_by_name(self, name):
+        users = filter(lambda x: x.name == name, self.store.values())
+        return None if len(users) == 0 else users.pop()
+
+    def get_by(self, **attributes):
+        users = filter(lambda user: reduce(lambda y, z: y and getattr(user, z) == attributes[z], attributes.keys(), True), self.store.values())
+        return None if len(users) == 0 else users.pop()
+
+    def get_all(self):
+        return self.store.values()
+
+    def filter_by(self, **filters):
+        return filter(lambda user: reduce(lambda y, z: y and getattr(user, z) == filters[z], filters.keys(), True), self.store.values())
+
+    def search_by_name(self, keyword):
+        if len(keyword) == 0:
+            return []
+        match = lambda x: keyword.lower() in x.name.lower() or keyword.lower() in x.fullname.lower()
+        matches = filter(match, self.store.values())
+        return matches
+
+    def total_users(self):
+        return len(self.store.keys())
+
+    def save(self, user):
+        self._validate_can_be('saved', user)
+        if not user.id:
+            user.id = self._next_id()
+        self.store[user.id] = user
+
+    def update(self, new_user):
+        self._validate_can_be('updated', new_user)
+        self.store[new_user.id] = new_user
 
 
     def _validate_can_be(self, action, user):

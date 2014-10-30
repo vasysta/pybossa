@@ -17,7 +17,7 @@
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
 from pybossa.model.blogpost import Blogpost
-from . import BaseFactory, factory, blog_repo
+from . import BaseFactory, factory, blog_repo, memo_blog_repo
 
 
 class BlogpostFactory(BaseFactory):
@@ -38,3 +38,14 @@ class BlogpostFactory(BaseFactory):
     owner = factory.SelfAttribute('app.owner')
     user_id = factory.LazyAttribute(
         lambda blogpost: blogpost.owner.id if blogpost.owner else None)
+
+
+class BlogpostFactoryMemory(BlogpostFactory):
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        blogpost = model_class(*args, **kwargs)
+        memo_blog_repo.save(blogpost)
+        return blogpost
+
+    app = factory.SubFactory('factories.AppFactoryMemory')

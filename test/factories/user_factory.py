@@ -17,7 +17,7 @@
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
 from pybossa.model.user import User
-from . import BaseFactory, factory, user_repo
+from . import BaseFactory, factory, user_repo, memo_user_repo
 
 
 class UserFactory(BaseFactory):
@@ -38,3 +38,12 @@ class UserFactory(BaseFactory):
     admin = False
     privacy_mode = True
     api_key =  factory.Sequence(lambda n: u'api-key%d' % n)
+
+
+class UserFactoryMemory(UserFactory):
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        user = model_class(*args, **kwargs)
+        memo_user_repo.save(user)
+        return user

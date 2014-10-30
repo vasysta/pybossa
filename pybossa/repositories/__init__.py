@@ -28,7 +28,7 @@ a kind and/or saving them to the DB by calling the ORM apropriate methods.
 
 For more complex DB queries, refer to other packages or services within PyBossa."""
 
-from project_repository import ProjectRepository
-from user_repository import UserRepository
-from blog_repository import BlogRepository
-from task_repository import TaskRepository
+from project_repository import ProjectRepository, MemoryProjectRepository
+from user_repository import UserRepository, MemoryUserRepository
+from blog_repository import BlogRepository, MemoryBlogRepository
+from task_repository import TaskRepository, MemoryTaskRepository
