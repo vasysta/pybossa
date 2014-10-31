@@ -22,17 +22,20 @@ from nose.tools import assert_raises
 from werkzeug.exceptions import Forbidden, Unauthorized
 from mock import patch
 from test_authorization import mock_current_user
-from factories import AppFactory, UserFactory
-from factories import reset_all_pk_sequences
+from factories import AppFactoryMemory, UserFactoryMemory
+from factories import reset_all_pk_sequences, clean_all_memory_repos
 
 
 
-class TestProjectAuthorization(Test):
+class TestProjectAuthorization(object):
 
     mock_anonymous = mock_current_user()
     mock_authenticated = mock_current_user(anonymous=False, admin=False, id=2)
     mock_admin = mock_current_user(anonymous=False, admin=True, id=1)
 
+    def setUp(self):
+        clean_all_memory_repos()
+        reset_all_pk_sequences()
 
 
     @patch('pybossa.auth.current_user', new=mock_anonymous)
@@ -67,7 +70,7 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_anonymous)
     def test_anonymous_user_can_read_given_non_hidden(self):
         """Test anonymous users can read a given non hidden project"""
-        project = AppFactory.create()
+        project = AppFactoryMemory.create()
 
         assert_not_raises(Exception, getattr(require, 'app').read, project)
 
@@ -76,7 +79,7 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_authenticated)
     def test_authenticated_user_can_read_given_non_hidden(self):
         """Test authenticated users can read a given non hidden project"""
-        project = AppFactory.create()
+        project = AppFactoryMemory.create()
 
         assert_not_raises(Exception, getattr(require, 'app').read, project)
 
@@ -85,7 +88,7 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_anonymous)
     def test_anonymous_user_cannot_read_given_hidden(self):
         """Test anonymous users cannot read hidden projects"""
-        project = AppFactory.create(hidden=1)
+        project = AppFactoryMemory.create(hidden=1)
 
         assert_raises(Unauthorized, getattr(require, 'app').read, project)
 
@@ -94,7 +97,7 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_authenticated)
     def test_authenticated_user_cannot_read_given_hidden(self):
         """Test authenticated users cannot read hidden projects if are not owners"""
-        project = AppFactory.create(hidden=1)
+        project = AppFactoryMemory.create(hidden=1)
 
         assert project.owner.id != self.mock_authenticated.id, project.owner
         assert_raises(Forbidden, getattr(require, 'app').read, project)
@@ -104,8 +107,8 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_authenticated)
     def test_owners_can_read_given_hidden(self):
         """Test the owner of a project can read it despite being hidden"""
-        owner = UserFactory.build_batch(2)[1]
-        project = AppFactory.create(hidden=1, owner=owner)
+        owner = UserFactoryMemory.build_batch(2)[1]
+        project = AppFactoryMemory.create(hidden=1, owner=owner)
 
         assert project.owner.id == self.mock_authenticated.id, project.owner
         assert_not_raises(Exception, getattr(require, 'app').read, project)
@@ -115,8 +118,8 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_admin)
     def test_admin_can_read_given_hidden(self):
         """Test an admin can read a project despite being hidden"""
-        owner = UserFactory.build_batch(2)[1]
-        project = AppFactory.create(hidden=1, owner=owner)
+        owner = UserFactoryMemory.build_batch(2)[1]
+        project = AppFactoryMemory.create(hidden=1, owner=owner)
 
         assert project.owner.id != self.mock_admin.id, project.owner
         assert_not_raises(Exception, getattr(require, 'app').read, project)
@@ -126,7 +129,7 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_anonymous)
     def test_anonymous_user_cannot_update(self):
         """Test anonymous users cannot update a project"""
-        project = AppFactory.create()
+        project = AppFactoryMemory.create()
 
         assert_raises(Unauthorized, getattr(require, 'app').update, project)
 
@@ -135,7 +138,7 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_authenticated)
     def test_authenticated_user_cannot_update(self):
         """Test authenticated users cannot update a project if aren't owners"""
-        project = AppFactory.create()
+        project = AppFactoryMemory.create()
 
         assert project.owner.id != self.mock_authenticated.id, project.owner
         assert_raises(Forbidden, getattr(require, 'app').update, project)
@@ -145,8 +148,8 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_authenticated)
     def test_owner_can_update(self):
         """Test owners can update a project"""
-        owner = UserFactory.build_batch(2)[1]
-        project = AppFactory.create(owner=owner)
+        owner = UserFactoryMemory.build_batch(2)[1]
+        project = AppFactoryMemory.create(owner=owner)
 
         assert project.owner.id == self.mock_authenticated.id, project.owner
         assert_not_raises(Exception, getattr(require, 'app').update, project)
@@ -156,8 +159,8 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_admin)
     def test_admin_can_update(self):
         """Test an admin can update a project"""
-        owner = UserFactory.build_batch(2)[1]
-        project = AppFactory.create(hidden=1, owner=owner)
+        owner = UserFactoryMemory.build_batch(2)[1]
+        project = AppFactoryMemory.create(hidden=1, owner=owner)
 
         assert project.owner.id != self.mock_admin.id, project.owner
         assert_not_raises(Exception, getattr(require, 'app').update, project)
@@ -167,7 +170,7 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_anonymous)
     def test_anonymous_user_cannot_delete(self):
         """Test anonymous users cannot delete a project"""
-        project = AppFactory.create()
+        project = AppFactoryMemory.create()
 
         assert_raises(Unauthorized, getattr(require, 'app').delete, project)
 
@@ -176,7 +179,7 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_authenticated)
     def test_authenticated_user_cannot_delete(self):
         """Test authenticated users cannot delete a project if aren't owners"""
-        project = AppFactory.create()
+        project = AppFactoryMemory.create()
 
         assert project.owner.id != self.mock_authenticated.id, project.owner
         assert_raises(Forbidden, getattr(require, 'app').delete, project)
@@ -186,8 +189,8 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_authenticated)
     def test_owner_can_delete(self):
         """Test owners can delete a project"""
-        owner = UserFactory.build_batch(2)[1]
-        project = AppFactory.create(owner=owner)
+        owner = UserFactoryMemory.build_batch(2)[1]
+        project = AppFactoryMemory.create(owner=owner)
 
         assert project.owner.id == self.mock_authenticated.id, project.owner
         assert_not_raises(Exception, getattr(require, 'app').delete, project)
@@ -197,8 +200,8 @@ class TestProjectAuthorization(Test):
     @patch('pybossa.auth.app.current_user', new=mock_admin)
     def test_admin_can_delete(self):
         """Test an admin can delete a project"""
-        owner = UserFactory.build_batch(2)[1]
-        project = AppFactory.create(hidden=1, owner=owner)
+        owner = UserFactoryMemory.build_batch(2)[1]
+        project = AppFactoryMemory.create(hidden=1, owner=owner)
 
         assert project.owner.id != self.mock_admin.id, project.owner
         assert_not_raises(Exception, getattr(require, 'app').delete, project)

@@ -24,7 +24,7 @@ from mock import patch
 from test_authorization import mock_current_user
 from factories import (AnonymousTaskRunFactoryMemory,
                        TaskFactoryMemory, TaskRunFactoryMemory, UserFactoryMemory)
-from factories import reset_all_pk_sequences, memo_task_repo
+from factories import reset_all_pk_sequences, memo_task_repo, clean_all_memory_repos
 
 
 @patch('pybossa.auth.taskrun.task_repo', new=memo_task_repo)
@@ -35,7 +35,6 @@ class TestTaskrunAuthorization(object):
     mock_admin = mock_current_user(anonymous=False, admin=True, id=1)
 
     def setUp(self):
-        from factories import clean_all_memory_repos, reset_all_pk_sequences
         clean_all_memory_repos()
         reset_all_pk_sequences()
 
