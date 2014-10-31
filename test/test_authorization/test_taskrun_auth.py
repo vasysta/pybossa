@@ -23,8 +23,9 @@ from werkzeug.exceptions import Forbidden, Unauthorized
 from mock import patch
 from test_authorization import mock_current_user
 from factories import (AnonymousTaskRunFactoryMemory,
-                       TaskFactoryMemory, TaskRunFactoryMemory, UserFactoryMemory)
-from factories import reset_all_pk_sequences, memo_task_repo, clean_all_memory_repos
+                       TaskFactoryMemory, TaskRunFactoryMemory,
+                       UserFactoryMemory, reset_all_pk_sequences)
+from helper.repositories import clean_all_memory_repos, memo_task_repo
 
 
 @patch('pybossa.auth.taskrun.task_repo', new=memo_task_repo)

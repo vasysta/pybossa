@@ -16,9 +16,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
+from pybossa.core import db
 from pybossa.model.app import App
-from . import BaseFactory, factory, project_repo, memo_project_repo
+from . import BaseFactory, factory
+from helper.repositories import memo_project_repo
+from pybossa.repositories import ProjectRepository
 
+project_repo = ProjectRepository(db)
 
 class AppFactory(BaseFactory):
     class Meta:

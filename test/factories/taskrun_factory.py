@@ -16,9 +16,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
+from pybossa.core import db
 from pybossa.model.task_run import TaskRun
-from . import BaseFactory, factory, task_repo, memo_task_repo
+from . import BaseFactory, factory
+from helper.repositories import memo_task_repo
+from pybossa.repositories import TaskRepository
 
+task_repo = TaskRepository(db)
 
 class TaskRunFactory(BaseFactory):
     class Meta:

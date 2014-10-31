@@ -22,8 +22,8 @@ from nose.tools import assert_raises
 from werkzeug.exceptions import Forbidden, Unauthorized
 from mock import patch
 from test_authorization import mock_current_user
-from factories import AppFactoryMemory, UserFactoryMemory
-from factories import reset_all_pk_sequences, clean_all_memory_repos
+from factories import AppFactoryMemory, UserFactoryMemory, reset_all_pk_sequences
+from helper.repositories import clean_all_memory_repos
 
 
 

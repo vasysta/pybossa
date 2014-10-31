@@ -19,9 +19,10 @@
 
 from default import Test, db
 from nose.tools import assert_raises
-from factories import AppFactory, CategoryFactory, \
-AppFactoryMemory, CategoryFactoryMemory, memo_project_repo
+from factories import (AppFactory, CategoryFactory,
+                       AppFactoryMemory, CategoryFactoryMemory)
 from pybossa.repositories import ProjectRepository
+from helper.repositories import memo_project_repo
 from pybossa.exc import WrongObjectError, DBIntegrityError
 
 

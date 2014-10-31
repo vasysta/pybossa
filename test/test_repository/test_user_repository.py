@@ -19,8 +19,9 @@
 
 from default import Test, db
 from nose.tools import assert_raises
-from factories import UserFactory, UserFactoryMemory, memo_user_repo
+from factories import UserFactory, UserFactoryMemory
 from pybossa.repositories import UserRepository
+from helper.repositories import memo_user_repo
 from pybossa.exc import WrongObjectError, DBIntegrityError
 
 
