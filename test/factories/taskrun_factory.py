@@ -55,3 +55,9 @@ class TaskRunFactoryMemory(TaskRunFactory):
 
     task = factory.SubFactory('factories.TaskFactoryMemory')
     user = factory.SubFactory('factories.UserFactoryMemory')
+
+
+class AnonymousTaskRunFactoryMemory(TaskRunFactoryMemory):
+    user = None
+    user_id = None
+    user_ip = '127.0.0.1'

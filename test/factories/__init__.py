@@ -56,5 +56,5 @@ from app_factory import AppFactory, AppFactoryMemory
 from blogpost_factory import BlogpostFactory, BlogpostFactoryMemory
 from category_factory import CategoryFactory, CategoryFactoryMemory
 from task_factory import TaskFactory, TaskFactoryMemory
-from taskrun_factory import TaskRunFactory, AnonymousTaskRunFactory, TaskRunFactoryMemory
+from taskrun_factory import TaskRunFactory, AnonymousTaskRunFactory, TaskRunFactoryMemory, AnonymousTaskRunFactoryMemory
 from user_factory import UserFactory, UserFactoryMemory
