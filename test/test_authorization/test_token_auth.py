@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
-from default import Test, assert_not_raises
+from default import assert_not_raises
 from pybossa.auth import require
 from nose.tools import assert_raises
 from werkzeug.exceptions import Forbidden, Unauthorized
@@ -25,7 +25,7 @@ from test_authorization import mock_current_user
 
 
 
-class TestTokenAuthorization(Test):
+class TestTokenAuthorization(object):
 
     auth_providers = ('twitter', 'facebook', 'google')
     mock_anonymous = mock_current_user()
