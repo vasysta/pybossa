@@ -22,17 +22,20 @@ from nose.tools import assert_raises
 from werkzeug.exceptions import Forbidden, Unauthorized
 from mock import patch
 from test_authorization import mock_current_user
-from factories import AppFactory, BlogpostFactory, UserFactory
-from factories import reset_all_pk_sequences
+from factories import AppFactoryMemory, BlogpostFactoryMemory, UserFactoryMemory
+from factories import reset_all_pk_sequences, clean_all_memory_repos
 
 
 
-class TestUserAuthorization(Test):
+class TestUserAuthorization(object):
 
     mock_anonymous = mock_current_user()
     mock_authenticated = mock_current_user(anonymous=False, admin=False, id=2)
     mock_admin = mock_current_user(anonymous=False, admin=True, id=1)
 
+    def setUp(self):
+        clean_all_memory_repos()
+        reset_all_pk_sequences()
 
 
     @patch('pybossa.auth.current_user', new=mock_anonymous)
@@ -81,7 +84,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_anonymous)
     def test_anonymous_user_can_read_given_user(self):
         """Test anonymous users can read a given user"""
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
         assert_not_raises(Exception, getattr(require, 'user').read, user)
 
 
@@ -89,7 +92,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_authenticated)
     def test_authenticated_user_can_read_given_user(self):
         """Test authenticated users can read a given user"""
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
         assert_not_raises(Exception, getattr(require, 'user').read, user)
 
 
@@ -97,7 +100,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_admin)
     def test_admins_can_read_given_user(self):
         """Test admins users can read a given user"""
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
         assert_not_raises(Exception, getattr(require, 'user').read, user)
 
 
@@ -105,7 +108,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_anonymous)
     def test_anonymous_user_cannot_update_given_user(self):
         """Test anonymous users cannot update a given user"""
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
         assert_raises(Unauthorized, getattr(require, 'user').update, user)
 
 
@@ -113,7 +116,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_authenticated)
     def test_authenticated_user_cannot_update_another_user(self):
         """Test authenticated users cannot update another user than themselves"""
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
 
         assert user.id != self.mock_authenticated.id, user.id
         assert_raises(Forbidden, getattr(require, 'user').update, user)
@@ -123,7 +126,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_authenticated)
     def test_authenticated_user_can_update_themselves(self):
         """Test authenticated users can update themselves"""
-        user = UserFactory.create_batch(2)[1]
+        user = UserFactoryMemory.create_batch(2)[1]
 
         assert user.id == self.mock_authenticated.id, user.id
         assert_not_raises(Exception, getattr(require, 'user').update, user)
@@ -133,8 +136,8 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_admin)
     def test_admins_can_update_any_user(self):
         """Test admins users can update any given user"""
-        himself = UserFactory.create()
-        other_user = UserFactory.create()
+        himself = UserFactoryMemory.create()
+        other_user = UserFactoryMemory.create()
 
         assert himself.id == self.mock_admin.id
         assert other_user.id != self.mock_admin.id
@@ -145,7 +148,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_anonymous)
     def test_anonymous_user_cannot_delete_given_user(self):
         """Test anonymous users cannot delete a given user"""
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
         assert_raises(Unauthorized, getattr(require, 'user').delete, user)
 
 
@@ -153,7 +156,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_authenticated)
     def test_authenticated_user_cannot_delete_another_user(self):
         """Test authenticated users cannot delete another user than themselves"""
-        user = UserFactory.create()
+        user = UserFactoryMemory.create()
 
         assert user.id != self.mock_authenticated.id, user.id
         assert_raises(Forbidden, getattr(require, 'user').delete, user)
@@ -163,7 +166,7 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_authenticated)
     def test_authenticated_user_can_delete_themselves(self):
         """Test authenticated users can delete themselves"""
-        user = UserFactory.create_batch(2)[1]
+        user = UserFactoryMemory.create_batch(2)[1]
 
         assert user.id == self.mock_authenticated.id, user.id
         assert_not_raises(Exception, getattr(require, 'user').delete, user)
@@ -173,8 +176,8 @@ class TestUserAuthorization(Test):
     @patch('pybossa.auth.user.current_user', new=mock_admin)
     def test_admins_can_delete_any_user(self):
         """Test admins users can delete any given user"""
-        himself = UserFactory.create()
-        other_user = UserFactory.create()
+        himself = UserFactoryMemory.create()
+        other_user = UserFactoryMemory.create()
 
         assert himself.id == self.mock_admin.id
         assert other_user.id != self.mock_admin.id
