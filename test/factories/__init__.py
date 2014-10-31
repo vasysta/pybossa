@@ -36,6 +36,13 @@ memo_task_repo = MemoryTaskRepository()
 memo_blog_repo = MemoryBlogRepository()
 
 
+def clean_all_memory_repos():
+    memo_user_repo.clean()
+    memo_project_repo.clean()
+    memo_task_repo.clean()
+    memo_blog_repo.clean()
+
+
 def reset_all_pk_sequences():
     AppFactory.reset_sequence()
     BlogpostFactory.reset_sequence()

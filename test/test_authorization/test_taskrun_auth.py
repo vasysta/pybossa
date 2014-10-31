@@ -22,18 +22,22 @@ from nose.tools import assert_raises
 from werkzeug.exceptions import Forbidden, Unauthorized
 from mock import patch
 from test_authorization import mock_current_user
-from factories import (AppFactory, AnonymousTaskRunFactory,
-                       TaskFactory, TaskRunFactory, UserFactory)
-from factories import reset_all_pk_sequences
+from factories import (AnonymousTaskRunFactoryMemory,
+                       TaskFactoryMemory, TaskRunFactoryMemory, UserFactoryMemory)
+from factories import reset_all_pk_sequences, memo_task_repo
 
 
-
-class TestTaskrunAuthorization(Test):
+@patch('pybossa.auth.taskrun.task_repo', new=memo_task_repo)
+class TestTaskrunAuthorization(object):
 
     mock_anonymous = mock_current_user()
     mock_authenticated = mock_current_user(anonymous=False, admin=False, id=2)
     mock_admin = mock_current_user(anonymous=False, admin=True, id=1)
 
+    def setUp(self):
+        from factories import clean_all_memory_repos, reset_all_pk_sequences
+        clean_all_memory_repos()
+        reset_all_pk_sequences()
 
 
     @patch('pybossa.auth.current_user', new=mock_anonymous)
@@ -42,7 +46,7 @@ class TestTaskrunAuthorization(Test):
         """Test anonymous user can create a taskrun for a given task if he
         hasn't already done it"""
 
-        taskrun = AnonymousTaskRunFactory.build()
+        taskrun = AnonymousTaskRunFactoryMemory.build()
 
         assert_not_raises(Exception,
                         getattr(require, 'taskrun').create,
@@ -55,9 +59,10 @@ class TestTaskrunAuthorization(Test):
         """Test anonymous user cannot create a taskrun for a task to which
         he has previously posted a taskrun"""
 
-        task = TaskFactory.create()
-        taskrun1 = AnonymousTaskRunFactory.create(task=task)
-        taskrun2 = AnonymousTaskRunFactory.build(task=task)
+        task = TaskFactoryMemory.create()
+        taskrun1 = AnonymousTaskRunFactoryMemory.create(task=task)
+        taskrun2 = AnonymousTaskRunFactoryMemory.build(task=task)
+
         assert_raises(Forbidden,
                     getattr(require, 'taskrun').create,
                     taskrun2)
@@ -69,9 +74,9 @@ class TestTaskrunAuthorization(Test):
         """Test anonymous user can create a taskrun for a task even though
         he has posted taskruns for different tasks in the same project"""
 
-        tasks = TaskFactory.create_batch(2)
-        taskrun1 = AnonymousTaskRunFactory.create(task=tasks[0])
-        taskrun2 = AnonymousTaskRunFactory.build(task_id=tasks[1].id)
+        tasks = TaskFactoryMemory.create_batch(2)
+        taskrun1 = AnonymousTaskRunFactoryMemory.create(task=tasks[0])
+        taskrun2 = AnonymousTaskRunFactoryMemory.build(task=tasks[1])
 
         assert_not_raises(Exception,
                       getattr(require, 'taskrun').create,
@@ -84,7 +89,7 @@ class TestTaskrunAuthorization(Test):
         """Test authenticated user can create a taskrun for a given task if he
         hasn't already done it"""
 
-        taskrun = TaskRunFactory.build()
+        taskrun = TaskRunFactoryMemory.build()
 
         assert self.mock_authenticated.id == taskrun.user.id
         assert_not_raises(Exception,
@@ -98,9 +103,9 @@ class TestTaskrunAuthorization(Test):
         """Test authenticated user cannot create a taskrun for a task to which
         he has previously posted a taskrun"""
 
-        task = TaskFactory.create()
-        taskrun1 = TaskRunFactory.create(task=task)
-        taskrun2 = TaskRunFactory.build(task=task, user=taskrun1.user)
+        task = TaskFactoryMemory.create()
+        taskrun1 = TaskRunFactoryMemory.create(task=task)
+        taskrun2 = TaskRunFactoryMemory.build(task=task, user=taskrun1.user)
 
         assert self.mock_authenticated.id == taskrun1.user.id
         assert_raises(Forbidden, getattr(require, 'taskrun').create, taskrun2)
@@ -112,10 +117,10 @@ class TestTaskrunAuthorization(Test):
         """Test authenticated user can create a taskrun for a task even though
         he has posted taskruns for different tasks in the same project"""
 
-        user = UserFactory.create_batch(2)[1]
-        tasks = TaskFactory.create_batch(2)
-        taskrun1 = TaskRunFactory.create(task=tasks[0], user=user)
-        taskrun2 = TaskRunFactory.build(task_id=tasks[1].id, user=user)
+        user = UserFactoryMemory.create_batch(2)[1]
+        tasks = TaskFactoryMemory.create_batch(2)
+        taskrun1 = TaskRunFactoryMemory.create(task=tasks[0], user=user)
+        taskrun2 = TaskRunFactoryMemory.build(task=tasks[1], user=user)
 
         assert self.mock_authenticated.id == taskrun2.user.id
         assert_not_raises(Exception,
@@ -128,8 +133,8 @@ class TestTaskrunAuthorization(Test):
     def test_anonymous_user_read(self):
         """Test anonymous user can read any taskrun"""
 
-        anonymous_taskrun = AnonymousTaskRunFactory.create()
-        user_taskrun = TaskRunFactory.create()
+        anonymous_taskrun = AnonymousTaskRunFactoryMemory.create()
+        user_taskrun = TaskRunFactoryMemory.create()
 
         assert_not_raises(Exception,
                       getattr(require, 'taskrun').read,
@@ -144,9 +149,9 @@ class TestTaskrunAuthorization(Test):
     def test_authenticated_user_read(self):
         """Test authenticated user can read any taskrun"""
 
-        own_taskrun = TaskRunFactory.create()
-        anonymous_taskrun = AnonymousTaskRunFactory.create()
-        other_users_taskrun = TaskRunFactory.create()
+        own_taskrun = TaskRunFactoryMemory.create()
+        anonymous_taskrun = AnonymousTaskRunFactoryMemory.create()
+        other_users_taskrun = TaskRunFactoryMemory.create()
 
         assert self.mock_authenticated.id == own_taskrun.user.id
         assert self.mock_authenticated.id != other_users_taskrun.user.id
@@ -166,7 +171,7 @@ class TestTaskrunAuthorization(Test):
     def test_anonymous_user_update_anoymous_taskrun(self):
         """Test anonymous users cannot update an anonymously posted taskrun"""
 
-        anonymous_taskrun = AnonymousTaskRunFactory.create()
+        anonymous_taskrun = AnonymousTaskRunFactoryMemory.create()
 
         assert_raises(Unauthorized,
                       getattr(require, 'taskrun').update,
@@ -178,7 +183,7 @@ class TestTaskrunAuthorization(Test):
     def test_authenticated_user_update_anonymous_taskrun(self):
         """Test authenticated users cannot update an anonymously posted taskrun"""
 
-        anonymous_taskrun = AnonymousTaskRunFactory.create()
+        anonymous_taskrun = AnonymousTaskRunFactoryMemory.create()
 
         assert_raises(Forbidden,
                       getattr(require, 'taskrun').update,
@@ -190,7 +195,7 @@ class TestTaskrunAuthorization(Test):
     def test_admin_update_anonymous_taskrun(self):
         """Test admins cannot update anonymously posted taskruns"""
 
-        anonymous_taskrun = AnonymousTaskRunFactory.create()
+        anonymous_taskrun = AnonymousTaskRunFactoryMemory.create()
 
         assert_raises(Forbidden,
                       getattr(require, 'taskrun').update,
@@ -202,7 +207,7 @@ class TestTaskrunAuthorization(Test):
     def test_anonymous_user_update_user_taskrun(self):
         """Test anonymous user cannot update taskruns posted by authenticated users"""
 
-        user_taskrun = TaskRunFactory.create()
+        user_taskrun = TaskRunFactoryMemory.create()
 
         assert_raises(Unauthorized,
                       getattr(require, 'taskrun').update,
@@ -214,8 +219,8 @@ class TestTaskrunAuthorization(Test):
     def test_authenticated_user_update_other_users_taskrun(self):
         """Test authenticated user cannot update any user taskrun"""
 
-        own_taskrun = TaskRunFactory.create()
-        other_users_taskrun = TaskRunFactory.create()
+        own_taskrun = TaskRunFactoryMemory.create()
+        other_users_taskrun = TaskRunFactoryMemory.create()
 
         assert self.mock_authenticated.id == own_taskrun.user.id
         assert self.mock_authenticated.id != other_users_taskrun.user.id
@@ -232,7 +237,7 @@ class TestTaskrunAuthorization(Test):
     def test_admin_update_user_taskrun(self):
         """Test admins cannot update taskruns posted by authenticated users"""
 
-        user_taskrun = TaskRunFactory.create()
+        user_taskrun = TaskRunFactoryMemory.create()
 
         assert self.mock_admin.id != user_taskrun.user.id
         assert_raises(Forbidden,
@@ -245,7 +250,7 @@ class TestTaskrunAuthorization(Test):
     def test_anonymous_user_delete_anonymous_taskrun(self):
         """Test anonymous users cannot delete an anonymously posted taskrun"""
 
-        anonymous_taskrun = AnonymousTaskRunFactory.create()
+        anonymous_taskrun = AnonymousTaskRunFactoryMemory.create()
 
         assert_raises(Unauthorized,
                       getattr(require, 'taskrun').delete,
@@ -257,7 +262,7 @@ class TestTaskrunAuthorization(Test):
     def test_authenticated_user_delete_anonymous_taskrun(self):
         """Test authenticated users cannot delete an anonymously posted taskrun"""
 
-        anonymous_taskrun = AnonymousTaskRunFactory.create()
+        anonymous_taskrun = AnonymousTaskRunFactoryMemory.create()
 
         assert_raises(Forbidden,
                       getattr(require, 'taskrun').delete,
@@ -269,7 +274,7 @@ class TestTaskrunAuthorization(Test):
     def test_admin_delete_anonymous_taskrun(self):
         """Test admins can delete anonymously posted taskruns"""
 
-        anonymous_taskrun = AnonymousTaskRunFactory.create()
+        anonymous_taskrun = AnonymousTaskRunFactoryMemory.create()
 
         assert_not_raises(Exception,
                       getattr(require, 'taskrun').delete,
@@ -281,7 +286,7 @@ class TestTaskrunAuthorization(Test):
     def test_anonymous_user_delete_user_taskrun(self):
         """Test anonymous user cannot delete taskruns posted by authenticated users"""
 
-        user_taskrun = TaskRunFactory.create()
+        user_taskrun = TaskRunFactoryMemory.create()
 
         assert_raises(Unauthorized,
                   getattr(require, 'taskrun').delete,
@@ -294,8 +299,8 @@ class TestTaskrunAuthorization(Test):
         """Test authenticated user cannot delete a taskrun if it was created
         by another authenticated user, but can delete his own taskruns"""
 
-        own_taskrun = TaskRunFactory.create()
-        other_users_taskrun = TaskRunFactory.create()
+        own_taskrun = TaskRunFactoryMemory.create()
+        other_users_taskrun = TaskRunFactoryMemory.create()
 
         assert self.mock_authenticated.id == own_taskrun.user.id
         assert self.mock_authenticated.id != other_users_taskrun.user.id
@@ -312,7 +317,7 @@ class TestTaskrunAuthorization(Test):
     def test_admin_delete_user_taskrun(self):
         """Test admins can delete taskruns posted by authenticated users"""
 
-        user_taskrun = TaskRunFactory.create()
+        user_taskrun = TaskRunFactoryMemory.create()
 
         assert self.mock_admin.id != user_taskrun.user.id, user_taskrun.user.id
         assert_not_raises(Exception,
