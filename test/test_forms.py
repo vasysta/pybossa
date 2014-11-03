@@ -18,55 +18,54 @@
 
 from wtforms import ValidationError
 from nose.tools import raises
+from mock import patch
 
 from pybossa.forms.forms import RegisterForm
-from default import Test, db, with_context
+from default import with_context
 from pybossa.forms import validator
 from pybossa.view.account import LoginForm
-from pybossa.repositories import UserRepository
-from factories import UserFactory
+from helper.repositories import memo_user_repo, clean_all_memory_repos
+from factories import UserFactoryMemory
 
-user_repo = UserRepository(db)
+user_repo = memo_user_repo
 
-class TestValidator(Test):
+class TestValidator(object):
     def setUp(self):
-        super(TestValidator, self).setUp()
-        with self.flask_app.app_context():
-            self.create()
+        clean_all_memory_repos()
 
+    @with_context
     @raises(ValidationError)
     def test_unique(self):
         """Test VALIDATOR Unique works."""
-        with self.flask_app.test_request_context('/'):
-            f = LoginForm()
-            f.email.data = self.email_addr
-            u = validator.Unique(user_repo.get_by, 'email_addr')
-            u.__call__(f, f.email)
+        user = UserFactoryMemory.create(email_addr='tester@tester.com')
+        f = LoginForm()
+        f.email.data = user.email_addr
+        u = validator.Unique(user_repo.get_by, 'email_addr')
+        u.__call__(f, f.email)
 
+    @with_context
     @raises(ValidationError)
     def test_not_allowed_chars(self):
         """Test VALIDATOR NotAllowedChars works."""
-        with self.flask_app.test_request_context('/'):
-            f = LoginForm()
-            f.email.data = self.email_addr + "$"
-            u = validator.NotAllowedChars()
-            u.__call__(f, f.email)
+        f = LoginForm()
+        f.email.data = "tester@tester.com$"
+        u = validator.NotAllowedChars()
+        u.__call__(f, f.email)
 
+    @with_context
     @raises(ValidationError)
     def test_comma_separated_integers(self):
         """Test VALIDATOR CommaSeparatedIntegers works."""
-        with self.flask_app.test_request_context('/'):
-            f = LoginForm()
-            f.email.data = '1 2 3'
-            u = validator.CommaSeparatedIntegers()
-            u.__call__(f, f.email)
+        f = LoginForm()
+        f.email.data = '1 2 3'
+        u = validator.CommaSeparatedIntegers()
+        u.__call__(f, f.email)
 
 
-
-class TestRegisterForm(Test):
+class TestRegisterForm(object):
 
     def setUp(self):
-        super(TestRegisterForm, self).setUp()
+        clean_all_memory_repos()
         self.fill_in_data = {'fullname': 'Tyrion Lannister', 'name': 'mylion',
                              'email_addr': 'tyrion@casterly.rock',
                              'password':'secret', 'confirm':'secret'}
@@ -86,10 +85,11 @@ class TestRegisterForm(Test):
 
         assert form.validate()
 
+    @patch.object(RegisterForm.name.args[1][2], 'query_function', new=user_repo.get_by)
     @with_context
     def test_register_form_unique_name(self):
         form = RegisterForm(**self.fill_in_data)
-        user = UserFactory.create(name='mylion')
+        user = UserFactoryMemory.create(name='mylion')
 
         assert not form.validate()
         assert "The user name is already taken" in form.errors['name'], form.errors
@@ -110,10 +110,11 @@ class TestRegisterForm(Test):
         assert not form.validate()
         assert "$#&\\/| and space symbols are forbidden" in form.errors['name'], form.errors
 
+    @patch.object(RegisterForm.email_addr.args[1][2], 'query_function', new=user_repo.get_by)
     @with_context
     def test_register_form_unique_email(self):
         form = RegisterForm(**self.fill_in_data)
-        user = UserFactory.create(email_addr='tyrion@casterly.rock')
+        user = UserFactoryMemory.create(email_addr='tyrion@casterly.rock')
 
         assert not form.validate()
         assert "Email is already taken" in form.errors['email_addr'], form.errors

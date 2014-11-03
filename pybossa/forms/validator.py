@@ -32,8 +32,8 @@ class Unique(object):
             message = lazy_gettext(u'This item already exists')
         self.message = message
 
-    def __call__(self, form, form_field):
-        filters = {self.field_name: form_field.data}
+    def __call__(self, form, field):
+        filters = {self.field_name: field.data}
         check = self.query_function(**filters)
         if 'id' in form:
             id = form.id.data
