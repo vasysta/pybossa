@@ -1,0 +1,10 @@
+ignore-paths:
+    - doc
+    - alembic
+    - contrib
+    - cookbooks
+    - dat
+    - dist
+    - env
+    - log
+    - provisioning
