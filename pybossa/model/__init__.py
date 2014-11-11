@@ -19,6 +19,7 @@
 import datetime
 import json
 import uuid
+import requests
 
 from sqlalchemy import Text
 from sqlalchemy.orm import relationship, backref, class_mapper
@@ -165,3 +166,19 @@ def update_redis(obj):
     tmp = pickle.dumps(obj)
     p.zadd('pybossa_feed', time(), tmp)
     p.execute()
+
+
+def update_app_timestamp(mapper, conn, target):
+    """Update method to be used by the relationship objects."""
+    sql_query = ("update app set updated='%s' where id=%s" %
+                 (make_timestamp(), target.app_id))
+    conn.execute(sql_query)
+
+
+def webhook(url, payload=None):
+    """Post to a webhook."""
+    headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
+    if url:
+        return requests.post(url, data=json.dumps(payload), headers=headers)
+    else:
+        return False

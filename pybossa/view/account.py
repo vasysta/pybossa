@@ -35,7 +35,7 @@ from flask import Blueprint, request, url_for, flash, redirect, abort
 from flask import render_template, current_app
 from flask.ext.login import login_required, login_user, logout_user, \
     current_user
-from flask.ext.mail import Message
+from rq import Queue
 
 import pybossa.model as model
 from flask.ext.babel import gettext
@@ -47,6 +47,8 @@ from pybossa.util import get_user_signup_method
 from pybossa.cache import users as cached_users
 from pybossa.cache import apps as cached_apps
 from pybossa.auth import require
+from pybossa.jobs import send_mail
+from pybossa.core import user_repo
 
 from pybossa.forms.account_view_forms import *
 
@@ -58,7 +60,9 @@ except ImportError:  # pragma: no cover
 
 blueprint = Blueprint('account', __name__)
 
-from pybossa.core import user_repo
+
+mail_queue = Queue('mail', connection=sentinel.master)
+
 
 
 def get_update_feed():
@@ -181,12 +185,12 @@ def register():
         confirm_url = url_for('.confirm_account', key=key, _external=True)
         if current_app.config.get('ACCOUNT_CONFIRMATION_DISABLED'):
             return redirect(confirm_url)
-        msg = Message(subject='Welcome to %s!' % current_app.config.get('BRAND'),
-                          recipients=[account['email_addr']])
-        msg.body = render_template('/account/email/validate_account.md',
-                                    user=account, confirm_url=confirm_url)
-        msg.html = markdown(msg.body)
-        mail.send(msg)
+        msg = dict(subject='Welcome to %s!' % current_app.config.get('BRAND'),
+                   recipients=[account['email_addr']],
+                   body=render_template('/account/email/validate_account.md',
+                                       user=account, confirm_url=confirm_url))
+        msg['html'] = markdown(msg['body'])
+        send_mail_job = mail_queue.enqueue(send_mail, msg)
         return render_template('account/account_validation.html')
     if request.method == 'POST' and not form.validate():
         flash(gettext('Please correct the errors'), 'error')
@@ -510,18 +514,18 @@ def forgot_password():
     if form.validate_on_submit():
         user = user_repo.get_by(email_addr=form.email_addr.data)
         if user and user.email_addr:
-            msg = Message(subject='Account Recovery',
-                          recipients=[user.email_addr])
+            msg = dict(subject='Account Recovery',
+                       recipients=[user.email_addr])
             if user.twitter_user_id:
-                msg.body = render_template(
+                msg['body'] = render_template(
                     '/account/email/forgot_password_openid.md',
                     user=user, account_name='Twitter')
             elif user.facebook_user_id:
-                msg.body = render_template(
+                msg['body'] = render_template(
                     '/account/email/forgot_password_openid.md',
                     user=user, account_name='Facebook')
             elif user.google_user_id:
-                msg.body = render_template(
+                msg['body'] = render_template(
                     '/account/email/forgot_password_openid.md',
                     user=user, account_name='Google')
             else:
@@ -529,11 +533,11 @@ def forgot_password():
                 key = signer.dumps(userdict, salt='password-reset')
                 recovery_url = url_for('.reset_password',
                                        key=key, _external=True)
-                msg.body = render_template(
+                msg['body'] = render_template(
                     '/account/email/forgot_password.md',
                     user=user, recovery_url=recovery_url)
-            msg.html = markdown(msg.body)
-            mail.send(msg)
+            msg['html'] = markdown(msg['body'])
+            send_mail_job = mail_queue.enqueue(send_mail, msg)
             flash(gettext("We've send you email with account "
                           "recovery instructions!"),
                   'success')
