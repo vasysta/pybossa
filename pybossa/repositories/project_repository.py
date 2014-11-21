@@ -159,8 +159,11 @@ class MemoryProjectRepository(object):
     def get_all(self):
         return self.store.values()
 
-    def filter_by(self, **filters):
-        return filter(lambda project: reduce(lambda y, z: y and getattr(project, z) == filters[z], filters.keys(), True), self.store.values())
+    def filter_by(self, limit=None, offset=0, **filters):
+        projects = filter(lambda project: reduce(lambda y, z: y and getattr(project, z) == filters[z], filters.keys(), True), self.store.values())
+        projects = sorted(projects, key=lambda item: item.id)
+        projects = projects[offset:] if limit is None else projects[offset:offset+limit]
+        return projects
 
     def save(self, project):
         self._validate_can_be('saved', project)
@@ -172,8 +175,15 @@ class MemoryProjectRepository(object):
         self._validate_can_be('updated', project)
         self.store[project.id] = project
 
-    def delete(self, project):
+    def delete(self, project, task_repo=None, blog_repo=None):
         self._validate_can_be('deleted', project)
+        if task_repo is not None:
+            tasks = task_repo.filter_tasks_by(app_id=project.id)
+            task_repo.delete_all(tasks)
+        if blog_repo is not None:
+            blogposts = blog_repo.filter_by(app_id=project.id)
+            for post in blogposts:
+                blog_repo.delete(post)
         del self.store[project.id]
 
 
@@ -190,8 +200,11 @@ class MemoryProjectRepository(object):
     def get_all_categories(self):
         return self.category_store.values()
 
-    def filter_categories_by(self, **filters):
-        return filter(lambda category: reduce(lambda y, z: y and getattr(category, z) == filters[z], filters.keys(), True), self.category_store.values())
+    def filter_categories_by(self, limit=None, offset=0, **filters):
+        cats = filter(lambda category: reduce(lambda y, z: y and getattr(category, z) == filters[z], filters.keys(), True), self.category_store.values())
+        cats = sorted(cats, key=lambda item: item.id)
+        cats = cats[offset:] if limit is None else cats[offset:offset+limit]
+        return cats
 
     def save_category(self, category):
         self._validate_can_be('saved as a Category', category, klass=Category)

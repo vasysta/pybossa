@@ -165,8 +165,10 @@ class MemoryTaskRepository(object):
         tasks = filter(lambda task: reduce(lambda y, z: y and getattr(task, z) == attributes[z], attributes.keys(), True), self.task_store.values())
         return None if len(tasks) == 0 else tasks.pop()
 
-    def filter_tasks_by(self, yielded=False, **filters):
+    def filter_tasks_by(self, limit=None, offset=0, yielded=False, **filters):
         tasks = filter(lambda task: reduce(lambda y, z: y and getattr(task, z) == filters[z], filters.keys(), True), self.task_store.values())
+        tasks = sorted(tasks, key=lambda item: item.id)
+        tasks = tasks[offset:] if limit is None else tasks[offset:offset+limit]
         if yielded:
             return (tr for tr in tasks)
         return tasks
@@ -183,8 +185,10 @@ class MemoryTaskRepository(object):
         taskruns = filter(lambda taskrun: reduce(lambda y, z: y and getattr(taskrun, z) == attributes[z], attributes.keys(), True), self.taskrun_store.values())
         return None if len(taskruns) == 0 else taskruns.pop()
 
-    def filter_task_runs_by(self, yielded=False, **filters):
+    def filter_task_runs_by(self, limit=None, offset=0, yielded=False, **filters):
         taskruns = filter(lambda taskrun: reduce(lambda y, z: y and getattr(taskrun, z) == filters[z], filters.keys(), True), self.taskrun_store.values())
+        taskruns = sorted(taskruns, key=lambda item: item.id)
+        taskruns = taskruns[offset:] if limit is None else taskruns[offset:offset+limit]
         if yielded:
             return (tr for tr in taskruns)
         return taskruns
@@ -212,6 +216,8 @@ class MemoryTaskRepository(object):
     def delete(self, element):
         self._validate_can_be('deleted', element)
         if isinstance(element, Task):
+            taskruns = self.filter_task_runs_by(task_id=element.id)
+            self.delete_all(taskruns)
             del self.task_store[element.id]
         if isinstance(element, TaskRun):
             del self.taskrun_store[element.id]

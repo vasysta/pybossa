@@ -113,8 +113,11 @@ class MemoryUserRepository(object):
     def get_all(self):
         return self.store.values()
 
-    def filter_by(self, **filters):
-        return filter(lambda user: reduce(lambda y, z: y and getattr(user, z) == filters[z], filters.keys(), True), self.store.values())
+    def filter_by(self, limit=None, offset=0, **filters):
+        users = filter(lambda user: reduce(lambda y, z: y and getattr(user, z) == filters[z], filters.keys(), True), self.store.values())
+        users = sorted(users, key=lambda item: item.id)
+        users = users[offset:] if limit is None else users[offset:offset+limit]
+        return users
 
     def search_by_name(self, keyword):
         if len(keyword) == 0:

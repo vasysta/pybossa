@@ -95,8 +95,11 @@ class MemoryBlogRepository(object):
         posts = filter(lambda post: reduce(lambda y, z: y and getattr(post, z) == attributes[z], attributes.keys(), True), self.store.values())
         return None if len(posts) == 0 else posts.pop()
 
-    def filter_by(self, **filters):
-        return filter(lambda post: reduce(lambda y, z: y and getattr(post, z) == filters[z], filters.keys(), True), self.store.values())
+    def filter_by(self, limit=None, offset=0, **filters):
+        blogposts = filter(lambda post: reduce(lambda y, z: y and getattr(post, z) == filters[z], filters.keys(), True), self.store.values())
+        blogposts = sorted(blogposts, key=lambda item: item.id)
+        blogposts = blogposts[offset:] if limit is None else blogposts[offset:offset+limit]
+        return blogposts
 
     def save(self, blogpost):
         self._validate_can_be('saved', blogpost)
