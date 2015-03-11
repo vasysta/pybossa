@@ -1,0 +1,8 @@
+{
+    "identifier": "newsletter",
+    "name": "Newsletter",
+    "author": "alejandrodob",
+    "license": "BSD",
+    "description": "Mailchimp newsletter for PyBossa.",
+    "version": "0.0.1"
+}
