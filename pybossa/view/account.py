@@ -36,12 +36,13 @@ from flask import render_template, current_app
 from flask.ext.login import login_required, login_user, logout_user, \
     current_user
 from rq import Queue
+from flask.ext.plugins import emit_event
 
 import pybossa.model as model
 from flask.ext.babel import gettext
 from sqlalchemy.sql import text
 from pybossa.model.user import User
-from pybossa.core import signer, mail, uploader, sentinel, newsletter
+from pybossa.core import signer, mail, uploader, sentinel
 from pybossa.util import Pagination, pretty_date
 from pybossa.util import get_user_signup_method
 from pybossa.cache import users as cached_users
@@ -49,7 +50,6 @@ from pybossa.cache import apps as cached_apps
 from pybossa.auth import ensure_authorized_to
 from pybossa.jobs import send_mail
 from pybossa.core import user_repo
-
 from pybossa.forms.account_view_forms import *
 
 try:
@@ -113,6 +113,7 @@ def signin():
 
     """
     form = LoginForm(request.form)
+    next_url = request.args.get('next')
     if request.method == 'POST' and form.validate():
         password = form.password.data
         email = form.email.data
@@ -121,12 +122,9 @@ def signin():
             login_user(user, remember=True)
             msg_1 = gettext("Welcome back") + " " + user.fullname
             flash(msg_1, 'success')
-            if newsletter.app:
-                if user.newsletter_prompted is False:
-                    if newsletter.is_user_subscribed(user.email_addr) is False:
-                        return redirect(url_for('account.newsletter_subscribe',
-                                                next=request.args.get('next')))
-            return redirect(request.args.get("next") or url_for("home.home"))
+            event_callbacks = emit_event('user-signed-in', {'user': user, 'next': next_url})
+            event_side_effect = event_callbacks[0] if len(event_callbacks) > 0 else None
+            return event_side_effect or redirect(request.args.get("next") or url_for("home.home"))
         elif user:
             msg, method = get_user_signup_method(user)
             if method == 'local':
@@ -153,7 +151,7 @@ def signin():
         return render_template('account/signin.html',
                                title="Sign in",
                                form=form, auth=auth,
-                               next=request.args.get('next'))
+                               next=next_url)
     else:
         # User already signed in, so redirect to home page
         return redirect(url_for("home.home"))
@@ -257,10 +255,9 @@ def confirm_account():
         u.email_addr = userdict['email_addr']
         user_repo.update(u)
         flash(gettext('Your email has been validated.'))
-        if newsletter.app:
-            return redirect(url_for('account.newsletter_subscribe'))
-        else:
-            return redirect(url_for('home.home'))
+        event_callbacks = emit_event('account-confirmed', {'user': u})
+        event_side_effect = event_callbacks[0] if len(event_callbacks) > 0 else None
+        return event_side_effect or redirect(url_for('home.home'))
 
     account = model.user.User(fullname=userdict['fullname'],
                               name=userdict['name'],
@@ -270,10 +267,9 @@ def confirm_account():
     user_repo.save(account)
     login_user(account, remember=True)
     flash(gettext('Thanks for signing-up'), 'success')
-    if newsletter.app:
-        return redirect(url_for('account.newsletter_subscribe'))
-    else:
-        return redirect(url_for('home.home'))
+    event_callbacks = emit_event('account-confirmed', {'user': account})
+    event_side_effect = event_callbacks[0] if len(event_callbacks) > 0 else None
+    return event_side_effect or redirect(url_for('home.home'))
 
 
 @blueprint.route('/profile', methods=['GET'])
