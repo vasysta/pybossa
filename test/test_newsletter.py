@@ -148,7 +148,7 @@ class TestNewsletter(web.Helper):
 
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_new_user_gets_newsletter(self, newsletter):
         """Test NEWSLETTER new user works."""
         newsletter.app = True
@@ -161,7 +161,7 @@ class TestNewsletter(web.Helper):
 
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_new_user_gets_newsletter_only_once(self, newsletter):
         """Test NEWSLETTER user gets newsletter only once works."""
         newsletter.app = True
@@ -182,7 +182,7 @@ class TestNewsletter(web.Helper):
         assert dom.find(id='notinterested') is None, err_msg
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_newsletter_subscribe_returns_404(self, newsletter):
         """Test NEWSLETTER view returns 404 works."""
         newsletter.app = None
@@ -194,7 +194,7 @@ class TestNewsletter(web.Helper):
         assert res.status_code == 404, err_msg
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_newsletter_subscribe(self, newsletter):
         """Test NEWSLETTER view subcribe works."""
         newsletter.app = True
@@ -209,7 +209,7 @@ class TestNewsletter(web.Helper):
 
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_newsletter_subscribe_next(self, newsletter):
         """Test NEWSLETTER view subscribe next works."""
         newsletter.app = True
@@ -225,7 +225,7 @@ class TestNewsletter(web.Helper):
         assert "Update" in res.data, res.data
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_newsletter_not_subscribe(self, newsletter):
         """Test NEWSLETTER view not subcribe works."""
         newsletter.app = True
@@ -237,7 +237,7 @@ class TestNewsletter(web.Helper):
         assert newsletter.subscribe_user.called is False, err_msg
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_newsletter_not_subscribe_next(self, newsletter):
         """Test NEWSLETTER view subscribe next works."""
         newsletter.app = True
@@ -251,7 +251,7 @@ class TestNewsletter(web.Helper):
         assert "Update" in res.data, res.data
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_newsletter_with_any_argument(self, newsletter):
         """Test NEWSLETTER view with any argument works."""
         newsletter.app = True
@@ -265,7 +265,7 @@ class TestNewsletter(web.Helper):
         assert dom.find(id='newsletter') is not None, err_msg
 
     @with_context
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     def test_newsletter_with_any_argument_variation(self, newsletter):
         """Test NEWSLETTER view with any argument variation works."""
         newsletter.app = True

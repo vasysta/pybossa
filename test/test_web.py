@@ -379,7 +379,7 @@ class TestWeb(web.Helper):
         msg = 'Email should be updated after validation.'
         assert user.email_addr == 'new@email.com', msg
 
-    @patch('pybossa.view.account.newsletter', autospec=True)
+    @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
     @patch('pybossa.view.account.url_for')
     @patch('pybossa.view.account.signer')
     def test_confirm_account_newsletter(self, fake_signer, url_for, newsletter):
