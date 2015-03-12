@@ -46,7 +46,7 @@ def redirect_to_newsletter_subscribe_on_signin(data):
     next_url = data['next']
     if newsletter_service.app:
         if user.newsletter_prompted is False:
-            if True:
+            if newsletter_service.is_user_subscribed(user.email_addr) is False:
                 return redirect(url_for('newsletter.newsletter_subscribe',
                                         next=next_url))
 
