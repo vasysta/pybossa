@@ -380,9 +380,11 @@ class TestWeb(web.Helper):
         assert user.email_addr == 'new@email.com', msg
 
     @patch('pybossa.plugins.newsletter.newsletter_service', autospec=True)
+    @patch('pybossa.plugins.newsletter.url_for')
     @patch('pybossa.view.account.url_for')
     @patch('pybossa.view.account.signer')
-    def test_confirm_account_newsletter(self, fake_signer, url_for, newsletter):
+    def test_confirm_account_newsletter(self, fake_signer, url_for_account,
+                                        url_for_plugin, newsletter):
         """Test WEB confirm email shows newsletter or home."""
         newsletter.app = True
         self.register()
@@ -394,11 +396,11 @@ class TestWeb(web.Helper):
                                               email_addr=user.email_addr)
         self.app.get('/account/register/confirmation?key=valid-key')
 
-        url_for.assert_called_with('account.newsletter_subscribe')
+        url_for_plugin.assert_called_with('newsletter.newsletter_subscribe')
 
         newsletter.app = False
         self.app.get('/account/register/confirmation?key=valid-key')
-        url_for.assert_called_with('home.home')
+        url_for_account.assert_called_with('home.home')
 
     @patch('pybossa.view.account.signer')
     def test_register_confirmation_creates_new_account(self, fake_signer):
