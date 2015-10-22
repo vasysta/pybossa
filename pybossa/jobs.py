@@ -22,7 +22,8 @@ import requests
 from flask import current_app, render_template
 from flask.ext.mail import Message
 from pybossa.core import mail, task_repo, importer
-from pybossa.util import with_cache_disabled
+from pybossa.model.webhook import Webhook
+from pybossa.util import with_cache_disabled, publish_channel
 import pybossa.dashboard.jobs as dashboard
 
 
@@ -187,8 +188,14 @@ def get_inactive_users_jobs(queue='quaterly'):
     # First users that have participated once but more than 3 months ago
     sql = text('''SELECT user_id FROM task_run
                WHERE user_id IS NOT NULL
-               AND TO_DATE(task_run.finish_time, 'YYYY-MM-DD\THH24:MI:SS.US')
-               <= NOW() - '3 month'::INTERVAL GROUP BY task_run.user_id;''')
+               AND user_id NOT IN
+               (SELECT user_id FROM task_run WHERE user_id IS NOT NULL
+               AND to_date(task_run.finish_time, 'YYYY-MM-DD\THH24:MI:SS.US')
+               >= NOW() - '3 month'::INTERVAL
+               GROUP BY task_run.user_id order by user_id)
+               AND to_date(task_run.finish_time, 'YYYY-MM-DD\THH24:MI:SS.US')
+               >= NOW() - '1 year'::INTERVAL
+               GROUP BY user_id ORDER BY user_id;''')
     results = db.slave_session.execute(sql)
     for row in results:
 
@@ -391,7 +398,7 @@ def get_non_updated_projects():
     from pybossa.core import db
     sql = text('''SELECT id FROM project WHERE TO_DATE(updated,
                 'YYYY-MM-DD\THH24:MI:SS.US') <= NOW() - '3 month':: INTERVAL
-               AND contacted != True LIMIT 25''')
+               AND contacted != True AND published = True LIMIT 25''')
     results = db.slave_session.execute(sql)
     projects = []
     for row in results:
@@ -403,6 +410,7 @@ def get_non_updated_projects():
 def warn_old_project_owners():
     """E-mail the project owners not updated in the last 3 months."""
     from pybossa.core import mail, project_repo
+    from pybossa.cache.projects import clean
     from flask.ext.mail import Message
 
     projects = get_non_updated_projects()
@@ -421,6 +429,8 @@ def warn_old_project_owners():
                           html=html)
             conn.send(msg)
             project.contacted = True
+            project.published = False
+            clean(project.id)
             project_repo.update(project)
     return True
 
@@ -446,14 +456,38 @@ def import_tasks(project_id, **form_data):
     return msg
 
 
-def webhook(url, payload=None):
+def webhook(url, payload=None, oid=None):
     """Post to a webhook."""
-    import json
-    headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
-    if url:
-        return requests.post(url, data=json.dumps(payload), headers=headers)
-    else:
-        return False
+    from flask import current_app
+    try:
+        import json
+        from pybossa.core import sentinel, webhook_repo
+        headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
+        if oid:
+            webhook = webhook_repo.get(oid)
+        else:
+            webhook = Webhook(project_id=payload['project_id'],
+                              payload=payload)
+        if url:
+            response = requests.post(url, data=json.dumps(payload), headers=headers)
+            webhook.response = response.text
+            webhook.response_status_code = response.status_code
+        else:
+            raise requests.exceptions.ConnectionError('Not URL')
+        if oid:
+            webhook_repo.update(webhook)
+            webhook = webhook_repo.get(oid)
+        else:
+            webhook_repo.save(webhook)
+    except requests.exceptions.ConnectionError:
+        webhook.response = 'Connection Error'
+        webhook.response_status_code = None
+        webhook_repo.save(webhook)
+    if current_app.config.get('SSE'):
+        publish_channel(sentinel, payload['project_short_name'],
+                        data=webhook.dictize(), type='webhook',
+                        private=True)
+    return webhook
 
 
 def notify_blog_users(blog_id, project_id, queue='high'):
