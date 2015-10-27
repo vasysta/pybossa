@@ -25,6 +25,7 @@ from flask import abort, request, make_response, current_app
 from functools import wraps
 from flask_oauthlib.client import OAuth
 from flask.ext.login import current_user
+from flask.ext.plugins import Plugin
 from math import ceil
 import json
 
@@ -472,3 +473,12 @@ def publish_channel(sentinel, project_short_name, data, type, private=True):
         channel = "channel_%s_%s" % ("public", project_short_name)
     msg = dict(type=type, data=data)
     sentinel.master.publish(channel, json.dumps(msg))
+
+
+class PybossaPlugin(Plugin):
+
+    """Class which enables Plugins to register blueprints / routes."""
+
+    def register_blueprint(self, blueprint, **kwargs):
+        """Registers a blueprint."""
+        current_app.register_blueprint(blueprint, **kwargs)
