@@ -21,6 +21,8 @@ from pybossa.cache import projects as cached_projects
 from factories import UserFactory, ProjectFactory, TaskFactory, \
     TaskRunFactory, AnonymousTaskRunFactory
 from mock import patch
+import datetime
+from pybossa.core import result_repo
 
 
 class TestProjectsCache(Test):
@@ -238,6 +240,26 @@ class TestProjectsCache(Test):
         taskruns = cached_projects.n_task_runs(project.id)
 
         assert taskruns == 2, taskruns
+
+
+    def test_n_results_returns_number_of_total_results(self):
+        project = ProjectFactory.create()
+        task = TaskFactory.create(n_answers=1, project=project)
+        TaskRunFactory.create(task=task, project=project)
+
+        results = cached_projects.n_results(project.id)
+
+        assert results == 0, results
+
+        result = result_repo.get_by(project_id=project.id)
+
+        result.info = dict(foo='bar')
+
+        result_repo.update(result)
+
+        results = cached_projects.n_results(project.id)
+
+        assert results == 1, results
 
 
     def test_n_registered_volunteers(self):
@@ -527,3 +549,25 @@ class TestProjectsCache(Test):
         number_of_published = cached_projects.n_published()
 
         assert number_of_published == 2, number_of_published
+
+
+    def test_average_contribution_time_returns_0_if_no_contributions(self):
+        project = ProjectFactory.create()
+
+        average_time = cached_projects.average_contribution_time(project.id)
+
+        assert average_time == 0, average_time
+
+    def test_average_contribution_time_returns_average_contribution_time(self):
+        project = ProjectFactory.create()
+        task = TaskFactory.create(project=project)
+        first_task_time = datetime.timedelta(0, 5)
+        second_task_time = datetime.timedelta(0, 7)
+        expected_average_time = datetime.timedelta(0, 6)
+        now = datetime.datetime.utcnow()
+        TaskRunFactory.create(task=task, created=now, finish_time=now+first_task_time)
+        TaskRunFactory.create(task=task, created=now, finish_time=now+second_task_time)
+
+        average_time = cached_projects.average_contribution_time(project.id)
+
+        assert average_time == expected_average_time, average_time

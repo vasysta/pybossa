@@ -1283,7 +1283,7 @@ with your account, otherwise you will not be able to export the data and
 a warning message will let you know it.
 
 Adding the CKAN API-KEY is really simple. You only need to create an account in
-the supported CKAN server (i.e. `the Data hub`_), check your profile and copy
+the supported CKAN server, check your profile and copy
 the API-KEY. Then, open your PyBossa account page, edit it and paste the key in
 the section **External Services**.
 
@@ -1296,4 +1296,60 @@ can actually cite your work.
 
 .. image:: http://i.imgur.com/98xjH8a.png
 
-.. _`the Data hub`: http://datahub.io
+
+
+
+.. _pybossa-project-results:
+
+Publishing results of your project
+==================================
+
+Since v1.2.0, PyBossa automatically creates "empty" results when a task is completed.
+
+For example, imagine your project is asking the following question in a set of images:
+"Do you see a triangle in this picture?" The possible answers are: yes and no. 
+
+Your project has configured the task redundancy to 5, so 5 people will answer that question 
+for a given image (or task). When the 5th person sends the answer, the server marks the task
+as completed, and it creates a result for the given task associating the answers, the task and
+the project:
+
+.. code-block:: js
+
+    {"id": 1,
+     "project_id": 1,
+     "task_id": 1,
+     "task_run_ids": [1,2,3,4,5],
+     "info": null}
+
+As in other PyBossa domain objects, a result has a JSON field named **info** that allows you
+to store the **final result** for that task using the task_runs 1, 2, 3, 4, 5. Imagine that
+the five volunteers answered: yes, then as you are the project owner you could update the
+info field with that value:
+
+.. code-block:: js
+
+    {"id": 1,
+     "project_id": 1,
+     "task_id": 1,
+     "task_run_ids": [1,2,3,4,5],
+     "info": {"triangle": "yes"}}
+
+The benefit of storing that information is that you can access these data via the PyBossa
+API so you will be able to show the results, in your result project section using the API.
+
+This will allow you to build beautiful visualizations of your results on maps, webgl, etc.
+
+Right now this new feature is evolving, so please contact us if you need help. We'll provide
+result templates soon for our own basic templates.
+
+Keeping track of the time spent by volunteers
+=============================================
+
+Since v1.1.3, PyBossa records a timestamp, for every task run, of the instant
+a volunteer requests a task to contribute to it. This is stored in the "created"
+attribute of the Task Runs.
+
+This allows, together with the "finish_time" attribute, to know how much time
+the volunteer has spent completing the task:
+  (time spent = finish_time - created)

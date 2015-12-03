@@ -21,15 +21,13 @@ import os
 import shutil
 import zipfile
 from StringIO import StringIO
-from default import db, Fixtures, with_context, FakeResponse
+from default import db, Fixtures, with_context, FakeResponse, mock_contributions_guard
 from helper import web
 from mock import patch, Mock, call
 from flask import Response, redirect
 from itsdangerous import BadSignature
 from collections import namedtuple
-from pybossa.core import signer
-from pybossa.util import unicode_csv_reader
-from pybossa.util import get_user_signup_method
+from pybossa.util import get_user_signup_method, unicode_csv_reader
 from pybossa.ckan import Ckan
 from bs4 import BeautifulSoup
 from requests.exceptions import ConnectionError
@@ -39,9 +37,9 @@ from pybossa.model.category import Category
 from pybossa.model.task import Task
 from pybossa.model.task_run import TaskRun
 from pybossa.model.user import User
-from pybossa.core import user_repo, sentinel
+from pybossa.core import user_repo, sentinel, project_repo, result_repo, signer
 from pybossa.jobs import send_mail, import_tasks
-from factories import ProjectFactory, CategoryFactory, TaskFactory, TaskRunFactory
+from factories import ProjectFactory, CategoryFactory, TaskFactory, TaskRunFactory, UserFactory
 from unidecode import unidecode
 from werkzeug.utils import secure_filename
 
@@ -58,7 +56,6 @@ class TestWeb(web.Helper):
     def clear_temp_container(self, user_id):
         """Helper function which deletes all files in temp folder of a given owner_id"""
         temp_folder = os.path.join('/tmp', 'user_%d' % user_id)
-        print temp_folder
         if os.path.isdir(temp_folder):
             shutil.rmtree(temp_folder)
 
@@ -77,10 +74,18 @@ class TestWeb(web.Helper):
         assert "Search" in res.data, err_msg
 
     @with_context
+    def test_leaderboard(self):
+        """Test WEB leaderboard works"""
+        user = UserFactory.create()
+        TaskRunFactory.create(user=user)
+        res = self.app.get('/leaderboard', follow_redirects=True)
+        assert self.html_title("Community Leaderboard") in res.data, res
+        assert user.name in res.data, res.data
+
+    @with_context
     @patch('pybossa.cache.project_stats.pygeoip', autospec=True)
-    @patch('pybossa.view.projects.uploader.upload_file', return_value=True)
-    def test_02_stats(self, mock1, mock2):
-        """Test WEB leaderboard or stats page works"""
+    def test_project_stats(self, mock1):
+        """Test WEB project stats page works"""
         res = self.register()
         res = self.signin()
         res = self.new_project(short_name="igil")
@@ -120,10 +125,35 @@ class TestWeb(web.Helper):
             res = self.app.get(url)
             assert "GeoLite" in res.data, res.data
 
-        res = self.app.get('/leaderboard', follow_redirects=True)
-        assert self.html_title("Community Leaderboard") in res.data, res
-        assert user.name in res.data, res.data
+    def test_contribution_time_shown_for_admins_for_every_project(self):
+        admin = UserFactory.create(admin=True)
+        admin.set_password('1234')
+        user_repo.save(admin)
+        owner = UserFactory.create(pro=False)
+        project = ProjectFactory.create(owner=owner)
+        task = TaskFactory.create(project=project)
+        TaskRunFactory.create(task=task)
+        url = '/project/%s/stats' % project.short_name
+        self.signin(email=admin.email_addr, password='1234')
 
+        assert 'Average contribution time' in self.app.get(url).data
+
+    def test_contribution_time_shown_in_pro_owned_projects(self):
+        pro_owner = UserFactory.create(pro=True)
+        pro_owned_project = ProjectFactory.create(owner=pro_owner)
+        task = TaskFactory.create(project=pro_owned_project)
+        TaskRunFactory.create(task=task)
+        pro_url = '/project/%s/stats' % pro_owned_project.short_name
+
+        assert 'Average contribution time' in self.app.get(pro_url).data
+
+    def test_contribution_time_not_shown_in_regular_user_owned_projects(self):
+        project = ProjectFactory.create()
+        task = TaskFactory.create(project=project)
+        TaskRunFactory.create(task=task)
+        url = '/project/%s/stats' % project.short_name
+
+        assert 'Average contribution time' not in self.app.get(url).data
 
     @with_context
     def test_03_account_index(self):
@@ -1318,15 +1348,18 @@ class TestWeb(web.Helper):
                            follow_redirects=True)
         assert 'TaskPresenter' in res.data, res.data
 
-    @patch('pybossa.view.projects.mark_task_as_requested_by_user')
-    def test_get_specific_ongoing_task_marks_task_as_requested(self, mark):
+    @patch('pybossa.view.projects.ContributionsGuard')
+    def test_get_specific_ongoing_task_marks_task_as_requested(self, guard):
+        fake_guard_instance = mock_contributions_guard()
+        guard.return_value = fake_guard_instance
         self.create()
         self.register()
         project = db.session.query(Project).first()
         task = db.session.query(Task).filter(Project.id == project.id).first()
         res = self.app.get('project/%s/task/%s' % (project.short_name, task.id),
                            follow_redirects=True)
-        mark.assert_called_with(task, sentinel.master)
+
+        assert fake_guard_instance.stamp.called
 
     @with_context
     @patch('pybossa.view.projects.uploader.upload_file', return_value=True)
@@ -2099,7 +2132,7 @@ class TestWeb(web.Helper):
         assert filename in res.headers.get('Content-Disposition'), res.headers
 
     @with_context
-    def test_51_export_taskruns_json(self):
+    def test_export_taskruns_json(self):
         """Test WEB export Task Runs to JSON works"""
         Fixtures.create()
         # First test for a non-existant project
@@ -2139,7 +2172,20 @@ class TestWeb(web.Helper):
         assert res.headers.get('Content-Disposition') == content_disposition, res.headers
 
     @with_context
-    def test_52_export_task_csv(self):
+    def test_export_task_json_no_tasks_returns_file_with_empty_list(self):
+        """Test WEB export Tasks to JSON returns empty list if no tasks in project"""
+        project = ProjectFactory.create(short_name='no_tasks_here')
+        uri = "/project/%s/tasks/export?type=task&format=json" % project.short_name
+        res = self.app.get(uri, follow_redirects=True)
+        zip = zipfile.ZipFile(StringIO(res.data))
+        extracted_filename = zip.namelist()[0]
+
+        exported_task_runs = json.loads(zip.read(extracted_filename))
+
+        assert exported_task_runs == [], exported_task_runs
+
+    @with_context
+    def test_export_task_csv(self):
         """Test WEB export Tasks to CSV works"""
         #Fixtures.create()
         # First test for a non-existant project
@@ -2221,13 +2267,22 @@ class TestWeb(web.Helper):
         content_disposition = 'attachment; filename=%d_project1_task_csv.zip' % project.id
         assert res.headers.get('Content-Disposition') == content_disposition, res.headers
 
-        # With an empty project
-        project = ProjectFactory.create()
-        # Now get the tasks in CSV format
+    @with_context
+    def test_export_task_csv_no_tasks_returns_empty_file(self):
+        """Test WEB export Tasks to CSV returns empty file if no tasks in project"""
+        project = ProjectFactory.create(short_name='no_tasks_here')
         uri = "/project/%s/tasks/export?type=task&format=csv" % project.short_name
         res = self.app.get(uri, follow_redirects=True)
-        msg = "project does not have tasks"
-        assert msg in res.data, msg
+        zip = zipfile.ZipFile(StringIO(res.data))
+        extracted_filename = zip.namelist()[0]
+
+        csv_content = StringIO(zip.read(extracted_filename))
+        csvreader = unicode_csv_reader(csv_content)
+        is_empty = True
+        for line in csvreader:
+            is_empty = False, line
+
+        assert is_empty
 
     @with_context
     def test_53_export_task_runs_csv(self):
@@ -2441,7 +2496,6 @@ class TestWeb(web.Helper):
         assert heading in res.data, "Export page should be available\n %s" % res.data
         # Now get the tasks in CKAN format
         uri = "/project/%s/tasks/export?type=task&format=ckan" % Fixtures.project_short_name
-        #res = self.app.get(uri, follow_redirects=True)
         with patch.dict(self.flask_app.config, {'CKAN_URL': 'http://ckan.com'}):
             # First time exporting the package
             res = self.app.get(uri, follow_redirects=True)
@@ -3542,3 +3596,40 @@ class TestWeb(web.Helper):
         message = "Sorry, you've contributed to all the tasks for this project, but this project still needs more volunteers, so please spread the word!"
         assert message not in res.data
         self.signout()
+
+    @with_context
+    def test_results(self):
+        """Test WEB results shows no data as no template and no data."""
+        tr = TaskRunFactory.create()
+        project = project_repo.get(tr.project_id)
+        url = '/project/%s/results' % project.short_name
+        res = self.app.get(url, follow_redirects=True)
+        assert "No results" in res.data, res.data
+
+    @with_context
+    def test_results_with_values(self):
+        """Test WEB results with values are not shown as no template but data."""
+        task = TaskFactory.create(n_answers=1)
+        tr = TaskRunFactory.create(task=task)
+        project = project_repo.get(tr.project_id)
+        url = '/project/%s/results' % project.short_name
+        result = result_repo.get_by(project_id=project.id)
+        result.info = dict(foo='bar')
+        result_repo.update(result)
+        res = self.app.get(url, follow_redirects=True)
+        assert "No results" in res.data, res.data
+
+    @with_context
+    def test_results_with_values_and_template(self):
+        """Test WEB results with values and template is shown."""
+        task = TaskFactory.create(n_answers=1)
+        tr = TaskRunFactory.create(task=task)
+        project = project_repo.get(tr.project_id)
+        project.info['results'] = "The results"
+        project_repo.update(project)
+        url = '/project/%s/results' % project.short_name
+        result = result_repo.get_by(project_id=project.id)
+        result.info = dict(foo='bar')
+        result_repo.update(result)
+        res = self.app.get(url, follow_redirects=True)
+        assert "The results" in res.data, res.data

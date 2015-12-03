@@ -58,7 +58,7 @@ from pybossa.importers import BulkImportException
 from pybossa.core import project_repo, user_repo, task_repo, blog_repo
 from pybossa.core import webhook_repo, auditlog_repo
 from pybossa.auditlogger import AuditLogger
-from pybossa.api import mark_task_as_requested_by_user
+from pybossa.contributions_guard import ContributionsGuard
 
 blueprint = Blueprint('project', __name__)
 
@@ -88,7 +88,8 @@ def project_by_shortname(short_name):
                 cached_projects.n_tasks(project.id),
                 cached_projects.n_task_runs(project.id),
                 cached_projects.overall_progress(project.id),
-                cached_projects.last_activity(project.id))
+                cached_projects.last_activity(project.id),
+                cached_projects.n_results(project.id))
     else:
         cached_projects.delete_project(short_name)
         return abort(404)
@@ -256,7 +257,8 @@ def new():
 def task_presenter_editor(short_name):
     errors = False
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress,
+     last_activity, n_results) = project_by_shortname(short_name)
 
     title = project_title(project, "Task Presenter Editor")
     ensure_authorized_to('read', project)
@@ -340,7 +342,8 @@ def task_presenter_editor(short_name):
 @login_required
 def delete(short_name):
     (project, owner, n_tasks,
-    n_task_runs, overall_progress, last_activity) = project_by_shortname(short_name)
+    n_task_runs, overall_progress, last_activity,
+    n_results) = project_by_shortname(short_name)
     title = project_title(project, "Delete")
     ensure_authorized_to('read', project)
     ensure_authorized_to('delete', project)
@@ -362,11 +365,13 @@ def delete(short_name):
 @login_required
 def update(short_name):
     (project, owner, n_tasks,
-     n_task_runs, overall_progress, last_activity) = project_by_shortname(short_name)
+     n_task_runs, overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     def handle_valid_form(form):
         (project, owner, n_tasks, n_task_runs,
-         overall_progress, last_activity) = project_by_shortname(short_name)
+         overall_progress, last_activity,
+         n_results) = project_by_shortname(short_name)
 
         new_project = project_repo.get_by_shortname(short_name)
         old_project = Project(**new_project.dictize())
@@ -463,7 +468,8 @@ def update(short_name):
 @blueprint.route('/<short_name>/')
 def details(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     if project.needs_password():
         redirect_to_password = _check_if_redirect_to_password(project)
@@ -495,7 +501,8 @@ def details(short_name):
 @login_required
 def settings(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     title = project_title(project, "Settings")
     ensure_authorized_to('read', project)
@@ -517,7 +524,8 @@ def settings(short_name):
 @login_required
 def import_task(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     n_volunteers = cached_projects.n_volunteers(project.id)
     n_completed_tasks = cached_projects.n_completed_tasks(project.id)
     title = project_title(project, "Import Tasks")
@@ -588,7 +596,8 @@ def setup_autoimporter(short_name):
     if not current_user.pro and not current_user.admin:
         raise abort(403)
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     n_volunteers = cached_projects.n_volunteers(project.id)
     n_completed_tasks = cached_projects.n_completed_tasks(project.id)
     dict_project = add_custom_contrib_button_to(project, get_user_id_or_ip())
@@ -639,7 +648,8 @@ def delete_autoimporter(short_name):
     if not current_user.pro and not current_user.admin:
         raise abort(403)
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     n_volunteers = cached_projects.n_volunteers(project.id)
     n_completed_tasks = cached_projects.n_completed_tasks(project.id)
     dict_project = add_custom_contrib_button_to(project, get_user_id_or_ip())
@@ -663,7 +673,8 @@ def delete_autoimporter(short_name):
 @blueprint.route('/<short_name>/password', methods=['GET', 'POST'])
 def password_required(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     form = PasswordForm(request.form)
     if request.method == 'POST' and form.validate():
         password = request.form.get('password')
@@ -683,7 +694,8 @@ def password_required(short_name):
 @blueprint.route('/<short_name>/task/<int:task_id>')
 def task_presenter(short_name, task_id):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     task = task_repo.get_task(id=task_id)
     if task is None:
         raise abort(404)
@@ -721,7 +733,10 @@ def task_presenter(short_name, task_id):
 
     if not (task.project_id == project.id):
         return respond('/projects/task/wrong.html')
-    mark_task_as_requested_by_user(task, sentinel.master)
+
+    guard = ContributionsGuard(sentinel.master)
+    guard.stamp(task, get_user_id_or_ip())
+
     if has_no_presenter(project):
         flash(gettext("Sorry, but this project is still a draft and does "
                       "not have a task presenter."), "error")
@@ -746,7 +761,8 @@ def presenter(short_name):
         return resp
 
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     if project.needs_password():
         redirect_to_password = _check_if_redirect_to_password(project)
@@ -786,7 +802,8 @@ def presenter(short_name):
 @blueprint.route('/<short_name>/tutorial')
 def tutorial(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     title = project_title(project, "Tutorial")
 
     if project.needs_password():
@@ -805,7 +822,8 @@ def export(short_name, task_id):
     """Return a file with all the TaskRuns for a given Task"""
     # Check if the project exists
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     if project.needs_password():
         redirect_to_password = _check_if_redirect_to_password(project)
@@ -827,7 +845,8 @@ def export(short_name, task_id):
 @blueprint.route('/<short_name>/tasks/')
 def tasks(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     title = project_title(project, "Tasks")
 
     if project.needs_password():
@@ -854,7 +873,8 @@ def tasks(short_name):
 @blueprint.route('/<short_name>/tasks/browse/<int:page>')
 def tasks_browse(short_name, page):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     title = project_title(project, "Tasks")
     n_volunteers = cached_projects.n_volunteers(project.id)
     n_completed_tasks = cached_projects.n_completed_tasks(project.id)
@@ -894,7 +914,8 @@ def tasks_browse(short_name, page):
 def delete_tasks(short_name):
     """Delete ALL the tasks for a given project"""
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     ensure_authorized_to('read', project)
     ensure_authorized_to('update', project)
     if request.method == 'GET':
@@ -913,8 +934,7 @@ def delete_tasks(short_name):
                                last_activity=last_activity,
                                title=title)
     else:
-        tasks = task_repo.filter_tasks_by(project_id=project.id)
-        task_repo.delete_all(tasks)
+        task_repo.delete_valid_from_project(project)
         msg = gettext("All the tasks and associated task runs have been deleted")
         flash(msg, 'success')
         return redirect(url_for('.tasks', short_name=project.short_name))
@@ -924,7 +944,8 @@ def delete_tasks(short_name):
 def export_to(short_name):
     """Export Tasks and TaskRuns in the given format"""
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     n_volunteers = cached_projects.n_volunteers(project.id)
     n_completed_tasks = cached_projects.n_completed_tasks(project.id)
     title = project_title(project, gettext("Export"))
@@ -950,75 +971,25 @@ def export_to(short_name):
                                n_completed_tasks=n_completed_tasks,
                                overall_progress=overall_progress)
 
-    def gen_json(table):
-        n = getattr(task_repo, 'count_%ss_with' % table)(project_id=project.id)
-        sep = ", "
-        yield "["
-        for i, tr in enumerate(getattr(task_repo, 'filter_%ss_by' % table)(project_id=project.id, yielded=True), 1):
-            item = json.dumps(tr.dictize())
-            if (i == n):
-                sep = ""
-            yield item + sep
-        yield "]"
-
-    def format_csv_properly(row, ty=None):
-        tmp = row.keys()
-        task_keys = []
-        for k in tmp:
-            k = "%s__%s" % (ty, k)
-            task_keys.append(k)
-        if (type(row['info']) == dict):
-            task_info_keys = []
-            tmp = row['info'].keys()
-            for k in tmp:
-                k = "%sinfo__%s" % (ty, k)
-                task_info_keys.append(k)
-        else:
-            task_info_keys = []
-
-        keys = sorted(task_keys + task_info_keys)
-        values = []
-        _prefix = "%sinfo" % ty
-        for k in keys:
-            prefix, k = k.split("__")
-            if prefix == _prefix:
-                if row['info'].get(k) is not None:
-                    values.append(row['info'][k])
-                else:
-                    values.append(None)
-            else:
-                if row.get(k) is not None:
-                    values.append(row[k])
-                else:
-                    values.append(None)
-
-        return values
-
-    def handle_task(writer, t):
-        writer.writerow(format_csv_properly(t.dictize(), ty='task'))
-
-    def handle_task_run(writer, t):
-        writer.writerow(format_csv_properly(t.dictize(), ty='taskrun'))
-
-    def get_csv(out, writer, table, handle_row):
-        for tr in getattr(task_repo, 'filter_%ss_by' % table)(project_id=project.id,
-                                                              yielded=True):
-            handle_row(writer, tr)
-        yield out.getvalue()
-
     def respond_json(ty):
         if ty not in ['task', 'task_run']:
             return abort(404)
         res = json_exporter.response_zip(project, ty)
         return res
 
-    def create_ckan_datastore(ckan, table, package_id):
+    def respond_csv(ty):
+        if ty not in ('task', 'task_run'):
+            return abort(404)
+        res = csv_exporter.response_zip(project, ty)
+        return res
+
+    def create_ckan_datastore(ckan, table, package_id, records):
         new_resource = ckan.resource_create(name=table,
                                             package_id=package_id)
         ckan.datastore_create(name=table,
                               resource_id=new_resource['result']['id'])
         ckan.datastore_upsert(name=table,
-                              records=gen_json(table),
+                              records=records,
                               resource_id=new_resource['result']['id'])
 
     def respond_ckan(ty):
@@ -1031,6 +1002,7 @@ def export_to(short_name):
 
         try:
             package, e = ckan.package_exists(name=project.short_name)
+            records = json_exporter.gen_json(ty, project.id)
             if e:
                 raise e
             if package:
@@ -1047,17 +1019,17 @@ def export_to(short_name):
                         ckan.datastore_delete(name=ty, resource_id=r['id'])
                         ckan.datastore_create(name=ty, resource_id=r['id'])
                         ckan.datastore_upsert(name=ty,
-                                              records=gen_json(ty),
+                                              records=records,
                                               resource_id=r['id'])
                         resource_found = True
                         break
                 if not resource_found:
-                    create_ckan_datastore(ckan, ty, package['id'])
+                    create_ckan_datastore(ckan, ty, package['id'], records)
             else:
                 owner = user_repo.get(project.owner_id)
                 package = ckan.package_create(project=project, user=owner,
                                               url=project_url)
-                create_ckan_datastore(ckan, ty, package['id'])
+                create_ckan_datastore(ckan, ty, package['id'], records)
             flash(msg, 'success')
             return respond()
         except requests.exceptions.ConnectionError:
@@ -1065,6 +1037,7 @@ def export_to(short_name):
             current_app.logger.error(msg)
             flash(msg, 'danger')
         except Exception as inst:
+            print inst
             if len(inst.args) == 3:
                 t, msg, status_code = inst.args
                 msg = ("Error: %s with status code: %s" % (t, status_code))
@@ -1073,35 +1046,6 @@ def export_to(short_name):
             current_app.logger.error(msg)
             flash(msg, 'danger')
         finally:
-            return respond()
-
-    def respond_csv(ty):
-        # Export Task(/Runs) to CSV
-        types = {
-            "task": (
-                Task, handle_task,
-                (lambda x: True),
-                gettext(
-                    "Oops, the project does not have tasks to \
-                    export, if you are the owner add some tasks")),
-            "task_run": (
-                TaskRun, handle_task_run,
-                (lambda x: True),
-                gettext(
-                    "Oops, there are no Task Runs yet to export, invite \
-                     some users to participate"))}
-        try:
-            table, handle_row, test, msg = types[ty]
-        except KeyError:
-            return abort(404)
-
-        # TODO: change check for existence below
-        t = getattr(task_repo, 'get_%s_by' % ty)(project_id=project.id)
-        if t is not None:
-            res = csv_exporter.response_zip(project, ty)
-            return res
-        else:
-            flash(msg, 'info')
             return respond()
 
     export_formats = ["json", "csv"]
@@ -1115,17 +1059,8 @@ def export_to(short_name):
         if len(request.args) >= 1:
             abort(404)
         project = add_custom_contrib_button_to(project, get_user_id_or_ip())
-        return render_template('/projects/export.html',
-                               title=title,
-                               loading_text=loading_text,
-                               ckan_name=current_app.config.get('CKAN_NAME'),
-                               project=project,
-                               owner=owner,
-                               n_tasks=n_tasks,
-                               n_task_runs=n_task_runs,
-                               n_volunteers=n_volunteers,
-                               n_completed_tasks=n_completed_tasks,
-                               overall_progress=overall_progress)
+        return respond()
+
     if fmt not in export_formats:
         abort(415)
     return {"json": respond_json, "csv": respond_csv, 'ckan': respond_ckan}[fmt](ty)
@@ -1135,7 +1070,8 @@ def export_to(short_name):
 def show_stats(short_name):
     """Returns Project Stats"""
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     n_volunteers = cached_projects.n_volunteers(project.id)
     n_completed_tasks = cached_projects.n_completed_tasks(project.id)
     title = project_title(project, "Statistics")
@@ -1162,13 +1098,14 @@ def show_stats(short_name):
         project.id,
         current_app.config['GEO'],
         period='2 week')
-    tmp_total = (users_stats['n_anon'] + users_stats['n_auth'])
-    if tmp_total > 0:
-        anon_pct_taskruns = int((users_stats['n_anon'] * 100) / tmp_total)
+    total_contribs = (users_stats['n_anon'] + users_stats['n_auth'])
+    if total_contribs > 0:
+        anon_pct_taskruns = int((users_stats['n_anon'] * 100) / total_contribs)
         auth_pct_taskruns = 100 - anon_pct_taskruns
     else:
         anon_pct_taskruns = 0
         auth_pct_taskruns = 0
+
     userStats = dict(
         geo=current_app.config['GEO'],
         anonymous=dict(
@@ -1182,23 +1119,29 @@ def show_stats(short_name):
             pct_taskruns=auth_pct_taskruns,
             top5=users_stats['auth']['top5']))
 
-    tmp = dict(userStats=users_stats['users'],
-               userAnonStats=users_stats['anon'],
-               userAuthStats=users_stats['auth'],
-               dayStats=dates_stats,
-               hourStats=hours_stats)
+    projectStats = dict(
+        userStats=users_stats['users'],
+        userAnonStats=users_stats['anon'],
+        userAuthStats=users_stats['auth'],
+        dayStats=dates_stats,
+        hourStats=hours_stats)
 
-    project = add_custom_contrib_button_to(project, get_user_id_or_ip())
-    return render_template('/projects/stats.html',
-                           title=title,
-                           appStats=json.dumps(tmp),
-                           userStats=userStats,
-                           project=project,
-                           owner=owner,
-                           n_tasks=n_tasks,
-                           overall_progress=overall_progress,
-                           n_volunteers=n_volunteers,
-                           n_completed_tasks=n_completed_tasks)
+    project_dict = add_custom_contrib_button_to(project, get_user_id_or_ip())
+    contrib_time = cached_projects.average_contribution_time(project.id)
+    formatted_contrib_time = round(contrib_time.total_seconds(), 2)
+
+    return render_template(
+        '/projects/stats.html',
+        title=title,
+        projectStats=json.dumps(projectStats),
+        userStats=userStats,
+        project=project_dict,
+        owner=owner,
+        n_tasks=n_tasks,
+        overall_progress=overall_progress,
+        n_volunteers=n_volunteers,
+        n_completed_tasks=n_completed_tasks,
+        avg_contrib_time=formatted_contrib_time)
 
 
 @blueprint.route('/<short_name>/tasks/settings')
@@ -1206,7 +1149,8 @@ def show_stats(short_name):
 def task_settings(short_name):
     """Settings page for tasks of the project"""
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     n_volunteers = cached_projects.n_volunteers(project.id)
     n_completed_tasks = cached_projects.n_completed_tasks(project.id)
     ensure_authorized_to('read', project)
@@ -1225,7 +1169,8 @@ def task_settings(short_name):
 @login_required
 def task_n_answers(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     title = project_title(project, gettext('Redundancy'))
     form = TaskRedundancyForm()
     ensure_authorized_to('read', project)
@@ -1257,7 +1202,8 @@ def task_n_answers(short_name):
 @login_required
 def task_scheduler(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     title = project_title(project, gettext('Task Scheduler'))
     form = TaskSchedulerForm()
 
@@ -1304,7 +1250,8 @@ def task_scheduler(short_name):
 @login_required
 def task_priority(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     title = project_title(project, gettext('Task Priority'))
     form = TaskPriorityForm()
 
@@ -1348,7 +1295,8 @@ def task_priority(short_name):
 @blueprint.route('/<short_name>/blog')
 def show_blogposts(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     blogposts = blog_repo.filter_by(project_id=project.id)
     if project.needs_password():
@@ -1370,7 +1318,8 @@ def show_blogposts(short_name):
 @blueprint.route('/<short_name>/<int:id>')
 def show_blogpost(short_name, id):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
     blogpost = blog_repo.get_by(id=id, project_id=project.id)
     if blogpost is None:
         raise abort(404)
@@ -1410,7 +1359,8 @@ def new_blogpost(short_name):
                                n_volunteers=cached_projects.n_volunteers(dict_project.get('id')))
 
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     form = BlogpostForm(request.form)
     del form.id
@@ -1441,7 +1391,8 @@ def new_blogpost(short_name):
 @login_required
 def update_blogpost(short_name, id):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     blogpost = blog_repo.get_by(id=id, project_id=project.id)
     if blogpost is None:
@@ -1510,7 +1461,8 @@ def _check_if_redirect_to_password(project):
 @login_required
 def auditlog(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     logs = auditlogger.get_project_logs(project.id)
     ensure_authorized_to('read', Auditlog, project_id=project.id)
@@ -1528,7 +1480,8 @@ def auditlog(short_name):
 @login_required
 def publish(short_name):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     ensure_authorized_to('publish', project)
     if request.method == 'GET':
@@ -1555,7 +1508,8 @@ def project_stream_uri_private(short_name):
     """Returns stream."""
     if current_app.config.get('SSE'):
         (project, owner, n_tasks, n_task_runs,
-         overall_progress, last_activity) = project_by_shortname(short_name)
+         overall_progress, last_activity,
+         n_results) = project_by_shortname(short_name)
         if (current_user.id == project.owner_id or current_user.admin):
             return Response(project_event_stream(short_name, 'private'),
                             mimetype="text/event-stream",
@@ -1571,7 +1525,8 @@ def project_stream_uri_public(short_name):
     """Returns stream."""
     if current_app.config.get('SSE'):
         (project, owner, n_tasks, n_task_runs,
-         overall_progress, last_activity) = project_by_shortname(short_name)
+         overall_progress, last_activity,
+         n_results) = project_by_shortname(short_name)
         return Response(project_event_stream(short_name, 'public'),
                         mimetype="text/event-stream")
     else:
@@ -1583,7 +1538,8 @@ def project_stream_uri_public(short_name):
 @login_required
 def webhook_handler(short_name, oid=None):
     (project, owner, n_tasks, n_task_runs,
-     overall_progress, last_activity) = project_by_shortname(short_name)
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
 
     responses = webhook_repo.filter_by(project_id=project.id)
     if request.method == 'POST' and oid:
@@ -1607,3 +1563,19 @@ def webhook_handler(short_name, oid=None):
                            n_task_runs=n_task_runs,
                            n_completed_tasks=cached_projects.n_completed_tasks(project.get('id')),
                            n_volunteers=cached_projects.n_volunteers(project.get('id')))
+
+
+@blueprint.route('/<short_name>/results')
+def results(short_name):
+    """Results page for the project."""
+    (project, owner, n_tasks, n_task_runs,
+     overall_progress, last_activity,
+     n_results) = project_by_shortname(short_name)
+
+    title = project_title(project, "Results")
+
+    ensure_authorized_to('read', project)
+
+    return render_template('/projects/results.html',
+                           title=title, project=project, owner=owner,
+                           n_results=n_results)

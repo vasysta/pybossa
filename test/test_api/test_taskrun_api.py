@@ -16,19 +16,41 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 import json
-from default import with_context
+from default import with_context, mock_contributions_guard
 from nose.tools import assert_equal
 from test_api import TestAPI
 from mock import patch
 from factories import (ProjectFactory, TaskFactory, TaskRunFactory,
                         AnonymousTaskRunFactory, UserFactory)
-from pybossa.repositories import TaskRepository
+from pybossa.repositories import ProjectRepository, TaskRepository
+from pybossa.repositories import ResultRepository
 from pybossa.core import db
 
+project_repo = ProjectRepository(db)
 task_repo = TaskRepository(db)
+result_repo = ResultRepository(db)
 
 
 class TestTaskrunAPI(TestAPI):
+
+    def create_result(self, n_results=1, n_answers=1, owner=None,
+                      filter_by=False):
+        if owner:
+            owner = owner
+        else:
+            owner = UserFactory.create()
+        project = ProjectFactory.create(owner=owner)
+        tasks = []
+        for i in range(n_results):
+            tasks.append(TaskFactory.create(n_answers=n_answers,
+                                            project=project))
+        for i in range(n_answers):
+            for task in tasks:
+                TaskRunFactory.create(task=task, project=project)
+        if filter_by:
+            return result_repo.filter_by(project_id=1)
+        else:
+            return result_repo.get_by(project_id=1)
 
 
     @with_context
@@ -91,9 +113,10 @@ class TestTaskrunAPI(TestAPI):
 
     @with_context
     @patch('pybossa.api.task_run.request')
-    @patch('pybossa.api.task_run._check_task_requested_by_user')
-    def test_taskrun_anonymous_post(self, fake_validation, mock_request):
+    @patch('pybossa.api.task_run.ContributionsGuard')
+    def test_taskrun_anonymous_post(self, guard, mock_request):
         """Test API TaskRun creation and auth for anonymous users"""
+        guard.return_value = mock_contributions_guard(True)
         project = ProjectFactory.create()
         task = TaskFactory.create(project=project)
         data = dict(
@@ -146,9 +169,10 @@ class TestTaskrunAPI(TestAPI):
         assert tmp.status_code == 403, err_msg
 
     @with_context
-    @patch('pybossa.api.task_run._check_task_requested_by_user')
-    def test_taskrun_authenticated_post(self, fake_validation):
+    @patch('pybossa.api.task_run.ContributionsGuard')
+    def test_taskrun_authenticated_post(self, guard):
         """Test API TaskRun creation and auth for authenticated users"""
+        guard.return_value = mock_contributions_guard(True)
         project = ProjectFactory.create()
         task = TaskFactory.create(project=project)
         data = dict(
@@ -422,9 +446,10 @@ class TestTaskrunAPI(TestAPI):
 
     @with_context
     @patch('pybossa.api.task_run.request')
-    @patch('pybossa.api.task_run._check_task_requested_by_user')
-    def test_taskrun_updates_task_state(self, fake_validation, mock_request):
+    @patch('pybossa.api.task_run.ContributionsGuard')
+    def test_taskrun_updates_task_state(self, guard, mock_request):
         """Test API TaskRun POST updates task state"""
+        guard.return_value = mock_contributions_guard(True)
         project = ProjectFactory.create()
         task = TaskFactory.create(project=project, n_answers=2)
         url = '/api/taskrun?api_key=%s' % project.owner.api_key
@@ -461,10 +486,8 @@ class TestTaskrunAPI(TestAPI):
         err_msg = "Task state should be equal to completed"
         assert task.state == 'completed', err_msg
 
-    @patch('pybossa.api.task_run._check_task_requested_by_user')
-    def test_taskrun_create_with_reserved_fields_returns_error(self, requested):
+    def test_taskrun_create_with_reserved_fields_returns_error(self):
         """Test API taskrun post with reserved fields raises an error"""
-        requested.return_value = True
         project = ProjectFactory.create()
         task = TaskFactory.create(project=project)
         url = '/api/taskrun?api_key=%s' % project.owner.api_key
@@ -483,10 +506,8 @@ class TestTaskrunAPI(TestAPI):
         error = json.loads(resp.data)
         assert error['exception_msg'] == "Reserved keys in payload", error
 
-    @patch('pybossa.api.task_run._check_task_requested_by_user')
-    def test_taskrun_not_stored_if_project_is_not_published(self, requested):
+    def test_taskrun_not_stored_if_project_is_not_published(self):
         """Test API taskrun post draft project will not store the taskrun"""
-        requested.return_value = True
         project = ProjectFactory.create(published=False)
         task = TaskFactory.create(project=project)
         url = '/api/taskrun?api_key=%s' % project.owner.api_key
@@ -502,3 +523,107 @@ class TestTaskrunAPI(TestAPI):
 
         assert resp.status_code == 200, resp.status_code
         assert task_runs == [], task_runs
+
+    @patch('pybossa.api.task_run.ContributionsGuard')
+    def test_taskrun_created_with_time_it_was_requested_on_creation(self, guard):
+        """Test API taskrun post adds the created timestamp of the moment the task
+        was requested by the user"""
+        guard.return_value = mock_contributions_guard(True, "a while ago")
+
+        project = ProjectFactory.create()
+        task = TaskFactory.create(project=project)
+        url = '/api/taskrun?api_key=%s' % project.owner.api_key
+        data = dict(
+            project_id=task.project_id,
+            task_id=task.id,
+            user_id=project.owner.id,
+            info='my result')
+        datajson = json.dumps(data)
+
+        resp = self.app.post(url, data=datajson)
+        taskrun = task_repo.filter_task_runs_by(task_id=data['task_id'])[0]
+
+        assert taskrun.created == "a while ago", taskrun.created
+
+    @with_context
+    def test_taskrun_cannot_be_deleted_associated_result(self):
+        """Test API taskrun cannot be deleted when a result is associated."""
+        root = UserFactory.create(admin=True)
+        results = self.create_result(n_results=10, filter_by=True)
+        project = project_repo.get(results[0].project_id)
+
+        # Owner
+        for result in results:
+            for tr in result.task_run_ids:
+                url = '/api/taskrun/%s?api_key=%s' % (tr, project.owner.api_key)
+                res = self.app.delete(url)
+                assert_equal(res.status, '403 FORBIDDEN', res.status)
+
+        # Admin
+        for result in results:
+            for tr in result.task_run_ids:
+                url = '/api/taskrun/%s?api_key=%s' % (tr, root.api_key)
+                res = self.app.delete(url)
+                assert_equal(res.status, '403 FORBIDDEN', res.status)
+
+    @with_context
+    def test_taskrun_cannot_be_deleted_associated_result_variation(self):
+        """Test API taskrun cannot be deleted when a result is associated
+        variation."""
+        root = UserFactory.create(admin=True)
+        results = self.create_result(filter_by=True)
+        project = project_repo.get(results[0].project_id)
+        task = task_repo.get_task(results[0].task_id)
+
+        task.n_answers = 30
+
+        task_repo.update(task)
+
+        volunteer = UserFactory.create()
+        tr_delete = TaskRunFactory.create(task=task, user=volunteer)
+
+        results = result_repo.filter_by(project_id=project.id, task_id=task.id)
+
+        assert len(results) == 1, len(results)
+        # Owner
+        for result in results:
+            for tr in result.task_run_ids:
+                url = '/api/taskrun/%s?api_key=%s' % (tr, project.owner.api_key)
+                res = self.app.delete(url)
+                assert_equal(res.status, '403 FORBIDDEN', res.status)
+
+            url = '/api/taskrun/%s?api_key=%s' % (tr_delete.id,
+                                                  volunteer.api_key)
+            res = self.app.delete(url)
+            assert_equal(res.status, '204 NO CONTENT', res.status)
+
+    @with_context
+    def test_taskrun_cannot_be_deleted_associated_result_variation_2(self):
+        """Test API taskrun cannot be deleted when a result is associated
+        variation."""
+        root = UserFactory.create(admin=True)
+        results = self.create_result(filter_by=True)
+        project = project_repo.get(results[0].project_id)
+        task = task_repo.get_task(results[0].task_id)
+
+        task.n_answers = 30
+
+        task_repo.update(task)
+
+        volunteer = UserFactory.create()
+        tr_delete = TaskRunFactory.create(task=task, user=volunteer)
+
+        results = result_repo.filter_by(project_id=project.id, task_id=task.id)
+
+        assert len(results) == 1, len(results)
+        # Owner
+        for result in results:
+            for tr in result.task_run_ids:
+                url = '/api/taskrun/%s?api_key=%s' % (tr, root.api_key)
+                res = self.app.delete(url)
+                assert_equal(res.status, '403 FORBIDDEN', res.status)
+
+            url = '/api/taskrun/%s?api_key=%s' % (tr_delete.id,
+                                                  volunteer.api_key)
+            res = self.app.delete(url)
+            assert_equal(res.status, '204 NO CONTENT', res.status)
